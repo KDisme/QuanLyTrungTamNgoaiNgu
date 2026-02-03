@@ -1,6 +1,4 @@
-hhehehe
-hihiihi
-myhanh
 
-Them moi
-branch Hanh
+myhanh
+Nguyễn Hoàng Khánh Duy
+development
