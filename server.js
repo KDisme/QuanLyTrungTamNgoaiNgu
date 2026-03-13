@@ -3,12 +3,14 @@ const app = require('./src/app');
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`API Documentation:`);
-  console.log(`  POST   http://localhost:${PORT}/api/students - Create student`);
-  console.log(`  GET    http://localhost:${PORT}/api/students - Get all students`);
-  console.log(`  GET    http://localhost:${PORT}/api/students/:id - Get student by ID`);
-  console.log(`  PUT    http://localhost:${PORT}/api/students/:id - Update student`);
-  console.log(`  DELETE http://localhost:${PORT}/api/students/:id - Delete student`);
+  console.log(`Server đang chạy trên cổng ${PORT}`);
+  console.log(`Kiểm tra sức khỏe: http://localhost:${PORT}/health`);
+  console.log(`Tài liệu API:`);
+  console.log(`  POST   http://localhost:${PORT}/api/auth/register - Đăng ký`);
+  console.log(`  POST   http://localhost:${PORT}/api/auth/login - Đăng nhập`);
+  console.log(`  GET    http://localhost:${PORT}/api/students - Lấy tất cả sinh viên`);
+  console.log(`  GET    http://localhost:${PORT}/api/students/:id - Lấy sinh viên theo ID`);
+  console.log(`  POST   http://localhost:${PORT}/api/students - Tạo sinh viên`);
+  console.log(`  PUT    http://localhost:${PORT}/api/students/:id - Cập nhật sinh viên`);
+  console.log(`  DELETE http://localhost:${PORT}/api/students/:id - Xóa sinh viên`);
 });

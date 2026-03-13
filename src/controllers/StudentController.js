@@ -1,112 +1,106 @@
-const StudentService = require('../services/StudentService');
-const StudentValidator = require('../validators/StudentValidator');
-const ApiError = require('../exceptions/ApiError');
+// controllers/studentController.js
+// Xử lý HTTP requests cho Student - Presentation Layer
 
-class StudentController {
+const studentService = require('../services/studentService');
+const asyncHandler = require('../middlewares/asyncHandler');
+
+/**
+ * Student Controller
+ * Nhận HTTP request, gọi service, trả về HTTP response
+ * Sử dụng asyncHandler để tự động catch errors
+ */
+const studentController = {
   /**
-   * Tạo sinh viên mới
-   * @param {Object} req - Request object
-   * @param {Object} res - Response object
+   * POST /api/students
+   * Tạo học viên mới
    */
-  async create(req, res, next) {
-    try {
-      const { body } = req;
-
-      // Kiểm tra dữ liệu
-      const validation = StudentValidator.validateCreateStudent(body);
-      if (!validation.valid) {
-        throw new ApiError(400, 'Validation error', validation.errors);
-      }
-
-      // Tạo sinh viên
-      const result = await StudentService.createStudent(body);
-      return res.status(201).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
+  create: asyncHandler(async (req, res, next) => {
+    const student = await studentService.createStudent(req.body);
+    res.status(201).json({
+      success: true,
+      message: 'Tạo học viên thành công',
+      student,
+    });
+  }),
 
   /**
-   * Lấy tất cả sinh viên
-   * @param {Object} req - Request object
-   * @param {Object} res - Response object
+   * GET /api/students
+   * Lấy toàn bộ danh sách học viên
    */
-  async getAll(req, res, next) {
-    try {
-      const result = await StudentService.getAllStudents();
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
+  getAll: asyncHandler(async (req, res, next) => {
+    const students = await studentService.getAllStudents();
+    res.json({
+      success: true,
+      message: 'Lấy danh sách học viên thành công',
+      students,
+      total: students.length,
+    });
+  }),
 
   /**
-   * Lấy sinh viên theo ID
-   * @param {Object} req - Request object
-   * @param {Object} res - Response object
+   * GET /api/students/:id
+   * Lấy thông tin học viên theo ID
    */
-  async getById(req, res, next) {
-    try {
-      const { id } = req.params;
-
-      if (!id || isNaN(id)) {
-        throw new ApiError(400, 'Invalid student ID');
-      }
-
-      const result = await StudentService.getStudentById(id);
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
+  getById: asyncHandler(async (req, res, next) => {
+    const student = await studentService.getStudentById(req.params.id);
+    res.json({
+      success: true,
+      message: 'Lấy thông tin học viên thành công',
+      student,
+    });
+  }),
 
   /**
-   * Cập nhật thông tin sinh viên
-   * @param {Object} req - Request object
-   * @param {Object} res - Response object
+   * PUT /api/students/:id
+   * Cập nhật thông tin học viên
    */
-  async update(req, res, next) {
-    try {
-      const { id } = req.params;
-      const { body } = req;
-
-      if (!id || isNaN(id)) {
-        throw new ApiError(400, 'Invalid student ID');
-      }
-
-      // Kiểm tra dữ liệu
-      const validation = StudentValidator.validateUpdateStudent(body);
-      if (!validation.valid) {
-        throw new ApiError(400, 'Validation error', validation.errors);
-      }
-
-      // Cập nhật sinh viên
-      const result = await StudentService.updateStudent(id, body);
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
+  update: asyncHandler(async (req, res, next) => {
+    const student = await studentService.updateStudent(req.params.id, req.body);
+    res.json({
+      success: true,
+      message: 'Cập nhật học viên thành công',
+      student,
+    });
+  }),
 
   /**
-   * Xóa sinh viên
-   * @param {Object} req - Request object
-   * @param {Object} res - Response object
+   * DELETE /api/students/:id
+   * Xóa học viên
    */
-  async delete(req, res, next) {
-    try {
-      const { id } = req.params;
+  delete: asyncHandler(async (req, res, next) => {
+    await studentService.deleteStudent(req.params.id);
+    res.json({
+      success: true,
+      message: 'Xóa học viên thành công',
+    });
+  }),
 
-      if (!id || isNaN(id)) {
-        throw new ApiError(400, 'Invalid student ID');
-      }
+  /**
+   * POST /api/students/:id/assign-class
+   * Gán lớp học cho sinh viên
+   * Body: { class_id: number }
+   */
+  assignToClass: asyncHandler(async (req, res, next) => {
+    const student = await studentService.assignStudentToClass(req.params.id, req.body.class_id);
+    res.json({
+      success: true,
+      message: 'Gán lớp học cho sinh viên thành công',
+      student,
+    });
+  }),
 
-      const result = await StudentService.deleteStudent(id);
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-}
+  /**
+   * DELETE /api/students/:id/remove-class
+   * Xóa sinh viên khỏi lớp học
+   */
+  removeFromClass: asyncHandler(async (req, res, next) => {
+    const student = await studentService.removeStudentFromClass(req.params.id);
+    res.json({
+      success: true,
+      message: 'Xóa sinh viên khỏi lớp học thành công',
+      student,
+    });
+  }),
+};
 
-module.exports = new StudentController();
+module.exports = studentController;

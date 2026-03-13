@@ -1,12 +1,19 @@
 const express = require('express');
-const StudentController = require('../controllers/StudentController');
-
 const router = express.Router();
+const studentController = require('../controllers/studentController');
+const authenticate = require('../middlewares/auth');
+const validateRequest = require('../middlewares/validateRequest');
+const { createStudentSchema, updateStudentSchema } = require('../validators/studentSchemas');
 
-router.post('/', (req, res, next) => StudentController.create(req, res, next));
-router.get('/', (req, res, next) => StudentController.getAll(req, res, next));
-router.get('/:id', (req, res, next) => StudentController.getById(req, res, next));
-router.put('/:id', (req, res, next) => StudentController.update(req, res, next));
-router.delete('/:id', (req, res, next) => StudentController.delete(req, res, next));
+// Tất cả routes dưới đây yêu cầu xác thực JWT
+router.post('/', authenticate, validateRequest(createStudentSchema), studentController.create);
+router.get('/', authenticate, studentController.getAll);
+router.get('/:id', authenticate, studentController.getById);
+router.put('/:id', authenticate, validateRequest(updateStudentSchema), studentController.update);
+router.delete('/:id', authenticate, studentController.delete);
+
+// Routes quản lý lớp học cho sinh viên
+router.post('/:id/assign-class', authenticate, studentController.assignToClass);
+router.delete('/:id/remove-class', authenticate, studentController.removeFromClass);
 
 module.exports = router;

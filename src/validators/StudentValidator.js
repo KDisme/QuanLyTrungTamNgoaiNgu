@@ -1,123 +1,62 @@
-class StudentValidator {
-  /**
-   * Kiểm tra dữ liệu tạo sinh viên
-   * @param {Object} data - Dữ liệu cần kiểm tra
-   * @returns {Object} - Kết quả kiểm tra {valid: boolean, errors: []}
-   */
-  validateCreateStudent(data) {
-    const errors = [];
+/**
+ * Student Validators
+ * Validators cụ thể cho domain Student
+ */
 
-    if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
-      errors.push('Name is required and must be a non-empty string');
-    }
+const {
+  validateRequiredFields,
+  validateResourceExists,
+  validateStringLength,
+  validateEmail,
+  validateCitizenId,
+  validateNoDuplicate,
+  validateNoDuplicateExcludeSelf,
+} = require('./commonValidators');
 
-    if (!data.email || typeof data.email !== 'string') {
-      errors.push('Email is required');
-    } else if (!this.isValidEmail(data.email)) {
-      errors.push('Email format is invalid');
-    }
+/**
+ * Validate dữ liệu tạo học viên
+ * @param {Object} data - Dữ liệu học viên
+ * @throws {ApiError} Nếu dữ liệu không hợp lệ
+ */
+const validateCreateStudentData = (data) => {
+  // Validate required fields
+  validateRequiredFields(data, ['name', 'email', 'birth_date', 'citizen_id']);
 
-    if (!data.phone || typeof data.phone !== 'string' || data.phone.trim() === '') {
-      errors.push('Phone is required and must be a non-empty string');
-    } else if (!this.isValidPhone(data.phone)) {
-      errors.push('Phone format is invalid');
-    }
+  // Validate string lengths
+  validateStringLength(data.name, 2, 100, 'Tên học viên');
 
-    if (!data.address || typeof data.address !== 'string' || data.address.trim() === '') {
-      errors.push('Address is required and must be a non-empty string');
-    }
+  // Validate email & citizen_id
+  validateEmail(data.email);
+  validateCitizenId(data.citizen_id);
 
-    if (!data.enrollmentDate) {
-      errors.push('Enrollment date is required');
-    } else if (!this.isValidDate(data.enrollmentDate)) {
-      errors.push('Enrollment date format is invalid');
-    }
+  return true;
+};
 
-    return {
-      valid: errors.length === 0,
-      errors,
-    };
+/**
+ * Validate dữ liệu cập nhật học viên
+ * @param {Object} updateData - Dữ liệu cập nhật
+ * @throws {ApiError} Nếu dữ liệu không hợp lệ
+ */
+const validateUpdateStudentData = (updateData) => {
+  // Validate string lengths nếu có thay đổi
+  if (updateData.name) {
+    validateStringLength(updateData.name, 2, 100, 'Tên học viên');
   }
 
-  /**
-   * Kiểm tra dữ liệu cập nhật sinh viên
-   * @param {Object} data - Dữ liệu cần kiểm tra
-   * @returns {Object} - Kết quả kiểm tra {valid: boolean, errors: []}
-   */
-  validateUpdateStudent(data) {
-    const errors = [];
-
-    if (data.name !== undefined) {
-      if (typeof data.name !== 'string' || data.name.trim() === '') {
-        errors.push('Name must be a non-empty string');
-      }
-    }
-
-    if (data.email !== undefined) {
-      if (typeof data.email !== 'string') {
-        errors.push('Email must be a string');
-      } else if (!this.isValidEmail(data.email)) {
-        errors.push('Email format is invalid');
-      }
-    }
-
-    if (data.phone !== undefined) {
-      if (typeof data.phone !== 'string' || data.phone.trim() === '') {
-        errors.push('Phone must be a non-empty string');
-      } else if (!this.isValidPhone(data.phone)) {
-        errors.push('Phone format is invalid');
-      }
-    }
-
-    if (data.address !== undefined) {
-      if (typeof data.address !== 'string' || data.address.trim() === '') {
-        errors.push('Address must be a non-empty string');
-      }
-    }
-
-    if (data.enrollmentDate !== undefined) {
-      if (!this.isValidDate(data.enrollmentDate)) {
-        errors.push('Enrollment date format is invalid');
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    };
+  // Validate email nếu có thay đổi
+  if (updateData.email) {
+    validateEmail(updateData.email);
   }
 
-  /**
-   * Kiểm tra định dạng email
-   * @param {String} email - Email cần kiểm tra
-   * @returns {Boolean} - True nếu hợp lệ
-   */
-  isValidEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+  // Validate citizen_id nếu có thay đổi
+  if (updateData.citizen_id) {
+    validateCitizenId(updateData.citizen_id);
   }
 
-  /**
-   * Kiểm tra định dạng số điện thoại
-   * @param {String} phone - Số điện thoại cần kiểm tra
-   * @returns {Boolean} - True nếu hợp lệ
-   */
-  isValidPhone(phone) {
-    const phoneRegex = /^(\+?\d{1,3}[-.\s]?)?\d{9,}$/;
-    return phoneRegex.test(phone);
-  }
+  return true;
+};
 
-  /**
-   * Kiểm tra định dạng ngày tháng
-   * @param {String|Date} date - Ngày cần kiểm tra
-   * @returns {Boolean} - True nếu hợp lệ
-   */
-  isValidDate(date) {
-    if (date instanceof Date) {
-      return !isNaN(date);
-    }
-    return !isNaN(Date.parse(date));
-  }
-}
-
-module.exports = new StudentValidator();
+module.exports = {
+  validateCreateStudentData,
+  validateUpdateStudentData,
+};

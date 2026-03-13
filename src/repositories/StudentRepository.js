@@ -1,215 +1,184 @@
-const Student = require('../models/Student');
-const { pool } = require('../config/database');
+// repositories/studentRepository.js
+// Thao tác với bảng students - Data Access Layer
 
-class StudentRepository {
+const { pool } = require('../config/db');
+const Student = require('../models/student');
+const { ApiError } = require('../exceptions');
+
+/**
+ * Student Repository
+ * Xử lý tất cả các thao tác với database cho bảng students
+ * Chỉ thực hiện queries và throw ApiError khi database error
+ */
+const studentRepository = {
   /**
-   * Tạo sinh viên mới
-   * @param {Object} data - Dữ liệu sinh viên
-   * @returns {Student} - Sinh viên vừa tạo
+   * Tạo học viên mới
+   * @throws {ApiError} Nếu database error
    */
-  async create(data) {
-    const query = `
-      INSERT INTO students (name, email, phone, address, enrollment_date)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, name, email, phone, address, enrollment_date, created_at, updated_at
-    `;
-    
+  async create({ name, email, birth_date, citizen_id, target_score, class_id }) {
     try {
-      const result = await pool.query(query, [
-        data.name,
-        data.email,
-        data.phone,
-        data.address,
-        data.enrollmentDate
-      ]);
-      
-      const row = result.rows[0];
-      const student = new Student(
-        row.id,
-        row.name,
-        row.email,
-        row.phone,
-        row.address,
-        row.enrollment_date
+      const result = await pool.query(
+        'INSERT INTO students (name, email, birth_date, citizen_id, target_score, class_id, enrollment_date, created_at) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, CURRENT_TIMESTAMP) RETURNING *',
+        [name, email, birth_date, citizen_id, target_score, class_id]
       );
-      student.createdAt = row.created_at;
-      student.updatedAt = row.updated_at;
-      return student;
-    } catch (error) {
-      throw new Error(`Failed to create student: ${error.message}`);
+      return new Student(result.rows[0]);
+    } catch (err) {
+      console.error('Database error in studentRepository.create:', err);
+      throw new ApiError(500, 'Lỗi tạo học viên từ database', 'STUDENT_CREATION_FAILED');
     }
-  }
+  },
 
   /**
-   * Lấy tất cả sinh viên
-   * @returns {Array} - Danh sách sinh viên
+   * Tìm học viên theo CMND/CCCD
+   * @returns {Student|null}
+   * @throws {ApiError} Nếu database error
    */
-  async getAll() {
-    const query = `SELECT * FROM students ORDER BY id DESC`;
-    
+  async findByCitizenId(citizen_id) {
     try {
-      const result = await pool.query(query);
-      return result.rows.map(row => {
-        const student = new Student(
-          row.id,
-          row.name,
-          row.email,
-          row.phone,
-          row.address,
-          row.enrollment_date
-        );
-        student.createdAt = row.created_at;
-        student.updatedAt = row.updated_at;
-        return student;
-      });
-    } catch (error) {
-      throw new Error(`Failed to fetch students: ${error.message}`);
+      const result = await pool.query('SELECT * FROM students WHERE citizen_id = $1', [citizen_id]);
+      if (result.rows[0]) return new Student(result.rows[0]);
+      return null;
+    } catch (err) {
+      console.error('Database error in studentRepository.findByCitizenId:', err);
+      throw new ApiError(500, 'Lỗi lấy học viên từ database', 'DATABASE_ERROR');
     }
-  }
+  },
 
   /**
-   * Lấy sinh viên theo ID
-   * @param {Number} id - ID sinh viên
-   * @returns {Student|null} - Sinh viên hoặc null
+   * Tìm học viên theo ID
+   * @returns {Student|null}
+   * @throws {ApiError} Nếu database error
    */
-  async getById(id) {
-    const query = `SELECT * FROM students WHERE id = $1`;
-    
+  async findById(id) {
     try {
-      const result = await pool.query(query, [id]);
-      
-      if (result.rows.length === 0) return null;
-      
-      const row = result.rows[0];
-      const student = new Student(
-        row.id,
-        row.name,
-        row.email,
-        row.phone,
-        row.address,
-        row.enrollment_date
+      const result = await pool.query('SELECT * FROM students WHERE id = $1', [id]);
+      if (result.rows[0]) return new Student(result.rows[0]);
+      return null;
+    } catch (err) {
+      console.error('Database error in studentRepository.findById:', err);
+      throw new ApiError(500, 'Lỗi lấy thông tin học viên từ database', 'DATABASE_ERROR');
+    }
+  },
+
+  /**
+   * Lấy toàn bộ danh sách học viên
+   * @returns {Student[]}
+   * @throws {ApiError} Nếu database error
+   */
+  async findAll() {
+    try {
+      const result = await pool.query('SELECT * FROM students ORDER BY created_at DESC');
+      return result.rows.map(row => new Student(row));
+    } catch (err) {
+      console.error('Database error in studentRepository.findAll:', err);
+      throw new ApiError(500, 'Lỗi lấy danh sách học viên từ database', 'DATABASE_ERROR');
+    }
+  },
+
+  /**
+   * Cập nhật học viên
+   * @returns {Student|null}
+   * @throws {ApiError} Nếu database error
+   */
+  async update(id, { name, email, birth_date, citizen_id, target_score, class_id }) {
+    try {
+      const current = await this.findById(id);
+      if (!current) return null;
+
+      const updated = {
+        name: name !== undefined ? name : current.name,
+        email: email !== undefined ? email : current.email,
+        birth_date: birth_date !== undefined ? birth_date : current.birth_date,
+        citizen_id: citizen_id !== undefined ? citizen_id : current.citizen_id,
+        target_score: target_score !== undefined ? target_score : current.target_score,
+        class_id: class_id !== undefined ? class_id : current.class_id,
+      };
+
+      const result = await pool.query(
+        'UPDATE students SET name = $1, email = $2, birth_date = $3, citizen_id = $4, target_score = $5, class_id = $6 WHERE id = $7 RETURNING *',
+        [updated.name, updated.email, updated.birth_date, updated.citizen_id, updated.target_score, updated.class_id, id]
       );
-      student.createdAt = row.created_at;
-      student.updatedAt = row.updated_at;
-      return student;
-    } catch (error) {
-      throw new Error(`Failed to fetch student: ${error.message}`);
+
+      if (result.rows[0]) return new Student(result.rows[0]);
+      return null;
+
+    } catch (err) {
+      console.error('Database error in studentRepository.update:', err);
+      throw new ApiError(500, 'Lỗi cập nhật học viên từ database', 'UPDATE_FAILED');
     }
-  }
+  },
 
   /**
-   * Cập nhật thông tin sinh viên
-   * @param {Number} id - ID sinh viên
-   * @param {Object} data - Dữ liệu cập nhật
-   * @returns {Student|null} - Sinh viên đã cập nhật hoặc null
-   */
-  async update(id, data) {
-    const updates = [];
-    const values = [];
-    let paramCount = 1;
-
-    if (data.name !== undefined) {
-      updates.push(`name = $${paramCount++}`);
-      values.push(data.name);
-    }
-    if (data.email !== undefined) {
-      updates.push(`email = $${paramCount++}`);
-      values.push(data.email);
-    }
-    if (data.phone !== undefined) {
-      updates.push(`phone = $${paramCount++}`);
-      values.push(data.phone);
-    }
-    if (data.address !== undefined) {
-      updates.push(`address = $${paramCount++}`);
-      values.push(data.address);
-    }
-    if (data.enrollmentDate !== undefined) {
-      updates.push(`enrollment_date = $${paramCount++}`);
-      values.push(data.enrollmentDate);
-    }
-
-    if (updates.length === 0) {
-      return this.getById(id);
-    }
-
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(id);
-
-    const query = `
-      UPDATE students 
-      SET ${updates.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING id, name, email, phone, address, enrollment_date, created_at, updated_at
-    `;
-
-    try {
-      const result = await pool.query(query, values);
-      
-      if (result.rows.length === 0) return null;
-      
-      const row = result.rows[0];
-      const student = new Student(
-        row.id,
-        row.name,
-        row.email,
-        row.phone,
-        row.address,
-        row.enrollment_date
-      );
-      student.createdAt = row.created_at;
-      student.updatedAt = row.updated_at;
-      return student;
-    } catch (error) {
-      throw new Error(`Failed to update student: ${error.message}`);
-    }
-  }
-
-  /**
-   * Xóa sinh viên
-   * @param {Number} id - ID sinh viên
-   * @returns {Boolean} - True nếu xóa thành công, false nếu không tìm thấy
+   * Xóa học viên
+   * @throws {ApiError} Nếu database error
    */
   async delete(id) {
-    const query = `DELETE FROM students WHERE id = $1 RETURNING id`;
-    
     try {
-      const result = await pool.query(query, [id]);
-      return result.rows.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to delete student: ${error.message}`);
+      await pool.query('DELETE FROM students WHERE id = $1', [id]);
+      return true;
+    } catch (err) {
+      console.error('Database error in studentRepository.delete:', err);
+      throw new ApiError(500, 'Lỗi xóa học viên từ database', 'DELETE_FAILED');
     }
-  }
+  },
 
   /**
-   * Tìm sinh viên theo email
-   * @param {String} email - Email sinh viên
-   * @returns {Student|null} - Sinh viên hoặc null
+   * Gán sinh viên cho lớp (cập nhật class_id)
+   * @param {number} studentId - ID của sinh viên
+   * @param {number} classId - ID của lớp
+   * @returns {Student|null}
+   * @throws {ApiError} Nếu database error
+   */
+  async assignToClass(studentId, classId) {
+    try {
+      const result = await pool.query(
+        'UPDATE students SET class_id = $1 WHERE id = $2 RETURNING *',
+        [classId, studentId]
+      );
+      if (result.rows[0]) return new Student(result.rows[0]);
+      return null;
+    } catch (err) {
+      console.error('Database error in studentRepository.assignToClass:', err);
+      throw new ApiError(500, 'Lỗi gán sinh viên cho lớp từ database', 'ASSIGN_CLASS_FAILED');
+    }
+  },
+
+  /**
+   * Xóa sinh viên khỏi lớp (set class_id = null)
+   * @param {number} studentId - ID của sinh viên
+   * @returns {Student|null}
+   * @throws {ApiError} Nếu database error
+   */
+  async removeFromClass(studentId) {
+    try {
+      const result = await pool.query(
+        'UPDATE students SET class_id = NULL WHERE id = $1 RETURNING *',
+        [studentId]
+      );
+      if (result.rows[0]) return new Student(result.rows[0]);
+      return null;
+    } catch (err) {
+      console.error('Database error in studentRepository.removeFromClass:', err);
+      throw new ApiError(500, 'Lỗi xóa sinh viên khỏi lớp từ database', 'REMOVE_CLASS_FAILED');
+    }
+  },
+
+  /**
+   * Lấy danh sách sinh viên theo email (tìm kiếm)
+   * @param {string} email - Email của sinh viên
+   * @returns {Student|null}
+   * @throws {ApiError} Nếu database error
    */
   async findByEmail(email) {
-    const query = `SELECT * FROM students WHERE email = $1`;
-    
     try {
-      const result = await pool.query(query, [email]);
-      
-      if (result.rows.length === 0) return null;
-      
-      const row = result.rows[0];
-      const student = new Student(
-        row.id,
-        row.name,
-        row.email,
-        row.phone,
-        row.address,
-        row.enrollment_date
-      );
-      student.createdAt = row.created_at;
-      student.updatedAt = row.updated_at;
-      return student;
-    } catch (error) {
-      throw new Error(`Failed to fetch student by email: ${error.message}`);
+      const result = await pool.query('SELECT * FROM students WHERE email = $1', [email]);
+      if (result.rows[0]) return new Student(result.rows[0]);
+      return null;
+    } catch (err) {
+      console.error('Database error in studentRepository.findByEmail:', err);
+      throw new ApiError(500, 'Lỗi lấy sinh viên theo email từ database', 'DATABASE_ERROR');
     }
-  }
-}
+  },
+};
 
-module.exports = new StudentRepository();
+module.exports = studentRepository;
