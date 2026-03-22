@@ -10,6 +10,14 @@ const asyncHandler = require('../middlewares/asyncHandler');
  * Sử dụng asyncHandler để tự động catch errors
  */
 const teachingScheduleController = {
+  createBulk: asyncHandler(async (req, res) => {
+        const schedules = await teachingScheduleService.createBulkSchedule(req.body);
+        res.status(201).json({
+            success: true,
+            message: `Đã tạo thành công ${schedules.length} buổi học.`,
+            schedules
+        });
+    }),
   /**
    * POST /api/teaching-schedules
    * Tạo lịch giảng dạy mới

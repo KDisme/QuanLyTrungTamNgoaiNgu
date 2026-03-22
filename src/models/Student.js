@@ -1,5 +1,5 @@
 class Student {
-  constructor({ id, name, email, birth_date, citizen_id, target_score, class_id, enrollment_date, created_at }) {
+  constructor({ id, name, email, birth_date, citizen_id, target_score, class_id, enrollment_date, status, created_at }) {
     this.id = id;
     this.name = name;
     this.email = email;
@@ -8,6 +8,7 @@ class Student {
     this.target_score = target_score;
     this.class_id = class_id;
     this.enrollment_date = enrollment_date;
+    this.status = status;
     this.created_at = created_at;
   }
 }

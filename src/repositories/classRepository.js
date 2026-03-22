@@ -33,11 +33,46 @@ const classRepository = {
    * @returns {Class|null}
    * @throws {ApiError} Nếu database error
    */
+  // async findById(id) {
+  //   try {
+  //     const result = await pool.query('SELECT * FROM classes WHERE id = $1', [id]);
+  //     if (result.rows[0]) return new Class(result.rows[0]);
+  //     return null;
+  //   } catch (err) {
+  //     console.error('Database error in classRepository.findById:', err);
+  //     throw new ApiError(500, 'Lỗi lấy thông tin lớp học từ database', 'DATABASE_ERROR');
+  //   }
+  // },
+  // src1/repositories/classRepository.js
+
+  // src1/repositories/classRepository.js
+
+  // src1/repositories/classRepository.js
+
   async findById(id) {
     try {
-      const result = await pool.query('SELECT * FROM classes WHERE id = $1', [id]);
-      if (result.rows[0]) return new Class(result.rows[0]);
-      return null;
+      // 1. Lấy thông tin lớp học và thông tin giảng viên (dùng LEFT JOIN)
+      const classResult = await pool.query(`
+      SELECT c.*, t.full_name as teacher_name 
+      FROM classes c
+      LEFT JOIN teachers t ON c.teacher_id = t.id
+      WHERE c.id = $1
+    `, [id]);
+
+      if (classResult.rows.length === 0) return null;
+
+      const classData = classResult.rows[0];
+
+      // 2. Lấy danh sách học viên đang thuộc lớp này
+      const studentsResult = await pool.query(
+        'SELECT id, name, email, citizen_id FROM students WHERE class_id = $1',
+        [id]
+      );
+
+      // 3. Gán danh sách học viên vào đối tượng lớp học
+      classData.students = studentsResult.rows;
+
+      return classData;
     } catch (err) {
       console.error('Database error in classRepository.findById:', err);
       throw new ApiError(500, 'Lỗi lấy thông tin lớp học từ database', 'DATABASE_ERROR');
@@ -49,15 +84,28 @@ const classRepository = {
    * @returns {Class[]}
    * @throws {ApiError} Nếu database error
    */
-  async findAll() {
-    try {
-      const result = await pool.query('SELECT * FROM classes ORDER BY created_at DESC');
-      return result.rows.map(row => new Class(row));
-    } catch (err) {
-      console.error('Database error in classRepository.findAll:', err);
-      throw new ApiError(500, 'Lỗi lấy danh sách lớp học từ database', 'DATABASE_ERROR');
-    }
-  },
+  // src1/repositories/classRepository.js
+
+async findAll() {
+  try {
+    // Sử dụng LEFT JOIN với bảng students và GROUP BY để đếm sĩ số cho từng lớp
+    const result = await pool.query(`
+      SELECT 
+        c.*, 
+        COUNT(s.id)::int as hv_count 
+      FROM classes c
+      LEFT JOIN students s ON c.id = s.class_id
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `);
+    
+    // Model Class cần nhận thêm field hv_count
+    return result.rows; 
+  } catch (err) {
+    console.error('Database error in classRepository.findAll:', err);
+    throw new ApiError(500, 'Lỗi lấy danh sách lớp học', 'DATABASE_ERROR');
+  }
+},
 
   /**
    * Cập nhật lớp học

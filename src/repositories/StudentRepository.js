@@ -4,6 +4,7 @@
 const { pool } = require('../config/db');
 const Student = require('../models/student');
 const { ApiError } = require('../exceptions');
+const { STUDENT_STATUS } = require('../constants/studentStatus');
 
 /**
  * Student Repository
@@ -15,11 +16,12 @@ const studentRepository = {
    * Tạo học viên mới
    * @throws {ApiError} Nếu database error
    */
-  async create({ name, email, birth_date, citizen_id, target_score, class_id }) {
+  async create({ name, email, birth_date, citizen_id, target_score, class_id, status }) {
     try {
+      const defaultStatus = status || STUDENT_STATUS.ENROLLED;
       const result = await pool.query(
-        'INSERT INTO students (name, email, birth_date, citizen_id, target_score, class_id, enrollment_date, created_at) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, CURRENT_TIMESTAMP) RETURNING *',
-        [name, email, birth_date, citizen_id, target_score, class_id]
+        'INSERT INTO students (name, email, birth_date, citizen_id, target_score, class_id, enrollment_date, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, CURRENT_TIMESTAMP) RETURNING *',
+        [name, email, birth_date, citizen_id, target_score, class_id, defaultStatus]
       );
       return new Student(result.rows[0]);
     } catch (err) {
@@ -177,6 +179,40 @@ const studentRepository = {
     } catch (err) {
       console.error('Database error in studentRepository.findByEmail:', err);
       throw new ApiError(500, 'Lỗi lấy sinh viên theo email từ database', 'DATABASE_ERROR');
+    }
+  },
+
+  /**
+   * Tìm học viên theo email và đang học (chưa hoàn thành)
+   * @returns {Student|null}
+   */
+  async findActiveByEmail(email) {
+    try {
+      const result = await pool.query(
+        'SELECT * FROM students WHERE email = $1 AND status != $2 LIMIT 1',
+        [email, STUDENT_STATUS.COMPLETED]
+      );
+      if (result.rows[0]) return new Student(result.rows[0]);
+      return null;
+    } catch (err) {
+      console.error('Database error in studentRepository.findActiveByEmail:', err);
+      throw new ApiError(500, 'Lỗi lấy sinh viên theo email từ database', 'DATABASE_ERROR');
+    }
+  },
+
+  /**
+   * Cập nhật trạng thái của học viên thành hoàn thành
+   * khi lớp học của họ đã kết thúc
+   */
+  async completeStudentsForEndedClasses() {
+    try {
+      await pool.query(
+        'UPDATE students SET status = $1 WHERE status = $2 AND class_id IN (SELECT id FROM classes WHERE end_date < CURRENT_DATE)',
+        [STUDENT_STATUS.COMPLETED, STUDENT_STATUS.ENROLLED]
+      );
+    } catch (err) {
+      console.error('Database error in studentRepository.completeStudentsForEndedClasses:', err);
+      throw new ApiError(500, 'Lỗi cập nhật trạng thái học viên', 'DATABASE_ERROR');
     }
   },
 };

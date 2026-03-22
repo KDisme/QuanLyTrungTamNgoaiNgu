@@ -42,7 +42,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/classes', classRoutes);
 app.use('/api/teachers', teacherRoutes);
-app.use('/api/teaching-schedules', teachingScheduleRoutes);
+app.use('/api/schedules', teachingScheduleRoutes);
 
 /**
  * 404 Not Found Handler

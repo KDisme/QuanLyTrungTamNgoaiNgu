@@ -33,6 +33,7 @@ const ERROR_CODES = {
   CLASS_FULL: 'CLASS_017',
   STUDENTS_ASSIGNMENT_FAILED: 'CLASS_018',
   STUDENT_NOT_FOUND: 'CLASS_019',
+  STUDENT_EMAIL_DUPLICATE: 'STUDENT_001',
   
   // Unauthorized
   UNAUTHORIZED: 'CLASS_999',
@@ -40,6 +41,7 @@ const ERROR_CODES = {
 
 const ERROR_MESSAGES = {
   [ERROR_CODES.CLASS_NOT_FOUND]: 'Không tìm thấy lớp học',
+  [ERROR_CODES.STUDENT_EMAIL_DUPLICATE]: 'Email đã được sử dụng bởi học viên đang học',
   [ERROR_CODES.CLASS_MISSING_REQUIRED_FIELDS]: 'Thiếu dữ liệu bắt buộc (tên, ngày bắt đầu, ngày kết thúc, sức chứa, số buổi)',
   [ERROR_CODES.CLASS_INVALID_DATES]: 'Ngày bắt đầu phải trước ngày kết thúc',
   [ERROR_CODES.CLASS_INVALID_CAPACITY]: 'Sức chứa phải lớn hơn 0',

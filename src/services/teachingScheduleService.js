@@ -7,6 +7,8 @@ const classRepository = require('../repositories/classRepository');
 const { ApiError, NotFoundException, ConflictException } = require('../exceptions');
 const { validateId, validateResourceExists } = require('../validators/commonValidators');
 const { validateCreateTeachingScheduleData, validateUpdateTeachingScheduleData } = require('../validators/teachingScheduleValidator');
+const dayjs = require('dayjs');
+
 
 /**
  * TeachingSchedule Service
@@ -181,6 +183,49 @@ const teachingScheduleService = {
 
     return await teachingScheduleRepository.delete(id);
   },
+ async createBulkSchedule(data) {
+        const { 
+            class_id, 
+            teacher_id, 
+            start_date, 
+            end_date, 
+            start_time, 
+            end_time, 
+            room, 
+            selectedDays 
+        } = data;
+
+        const createdSchedules = [];
+        let currentDate = dayjs(start_date);
+        const lastDate = dayjs(end_date);
+
+        // Vòng lặp rải lịch
+        while (currentDate.isBefore(lastDate) || currentDate.isSame(lastDate)) {
+            const dayOfWeek = currentDate.day(); // 0 (CN) -> 6 (T7)
+            
+            if (selectedDays.includes(dayOfWeek)) {
+                await teachingScheduleRepository.create({
+                    class_id,
+                    teacher_id,
+                    teaching_date: currentDate.format('YYYY-MM-DD'),
+                    start_time,
+                    end_time,
+                    room
+                });
+            }
+            currentDate = currentDate.add(1, 'day');
+        }
+        return { count: "Success" };
+    },
+
+    async getAllSchedules() {
+        return await teachingScheduleRepository.findAll();
+    },
+
+    async deleteSchedule(id) {
+        return await teachingScheduleRepository.delete(id);
+    }
+
 };
 
 module.exports = teachingScheduleService;

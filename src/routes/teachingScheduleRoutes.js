@@ -5,6 +5,18 @@ const authenticate = require('../middlewares/auth');
 const validateRequest = require('../middlewares/validateRequest');
 const { createTeachingScheduleSchema, updateTeachingScheduleSchema } = require('../validators/teachingScheduleSchemas');
 
+// 1. Route tạo hàng loạt (PHẢI ĐẶT TRÊN CÙNG)
+router.post('/bulk', authenticate, teachingScheduleController.createBulk);
+
+// 2. Các route cơ bản
+router.post('/', authenticate, teachingScheduleController.create);
+router.get('/', authenticate, teachingScheduleController.getAll);
+
+// 3. Các route có tham số :id (ĐẶT DƯỚI CÙNG)
+router.get('/:id', authenticate, teachingScheduleController.getById);
+router.put('/:id', authenticate, teachingScheduleController.update);
+router.delete('/:id', authenticate, teachingScheduleController.delete);
+
 // Tất cả routes dưới đây yêu cầu xác thực JWT
 router.post('/', authenticate, validateRequest(createTeachingScheduleSchema), teachingScheduleController.create);
 router.get('/', authenticate, teachingScheduleController.getAll);
@@ -16,5 +28,6 @@ router.delete('/:id', authenticate, teachingScheduleController.delete);
 router.get('/teacher/:teacher_id', authenticate, teachingScheduleController.getByTeacher);
 router.get('/class/:class_id', authenticate, teachingScheduleController.getByClass);
 router.get('/date/:date', authenticate, teachingScheduleController.getByDate);
+
 
 module.exports = router;

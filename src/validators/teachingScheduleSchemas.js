@@ -17,9 +17,17 @@ const createTeachingScheduleSchema = Joi.object({
       'any.required': 'ID lớp học là bắt buộc',
     }),
 
-    teaching_date: Joi.date().required().iso().messages({
-      'date.base': 'Ngày giảng dạy phải là ngày hợp lệ',
-      'any.required': 'Ngày giảng dạy là bắt buộc',
+    // Chọn theo các thứ trong tuần (0=Chủ nhật, 1=Thứ 2, ..., 6=Thứ 7)
+    day_of_week: Joi.array().items(
+      Joi.number().integer().min(0).max(6).messages({
+        'number.base': 'Ngày trong tuần phải là số',
+        'number.min': 'Ngày trong tuần phải từ 0 đến 6',
+        'number.max': 'Ngày trong tuần phải từ 0 đến 6',
+      })
+    ).min(1).unique().required().messages({
+      'array.min': 'Phải chọn ít nhất một ngày trong tuần',
+      'array.unique': 'Các ngày trong tuần không được trùng nhau',
+      'any.required': 'day_of_week là bắt buộc',
     }),
 
     start_time: Joi.string().required().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).messages({
@@ -47,10 +55,6 @@ const createTeachingScheduleSchema = Joi.object({
 
 const updateTeachingScheduleSchema = Joi.object({
   body: Joi.object({
-    teacher_id: Joi.number().integer().optional().messages({
-      'number.base': 'ID giáo viên phải là số',
-    }),
-
     class_id: Joi.number().integer().optional().messages({
       'number.base': 'ID lớp học phải là số',
     }),
@@ -70,6 +74,17 @@ const updateTeachingScheduleSchema = Joi.object({
     room: Joi.string().min(1).max(50).optional().messages({
       'string.min': 'Phòng học phải ít nhất 1 ký tự',
       'string.max': 'Phòng học tối đa 50 ký tự',
+    }),
+
+    day_of_week: Joi.array().items(
+      Joi.number().integer().min(0).max(6).messages({
+        'number.base': 'Ngày trong tuần phải là số',
+        'number.min': 'Ngày trong tuần phải từ 0 đến 6',
+        'number.max': 'Ngày trong tuần phải từ 0 đến 6',
+      })
+    ).min(1).unique().optional().messages({
+      'array.min': 'Phải chọn ít nhất một ngày trong tuần',
+      'array.unique': 'Các ngày trong tuần không được trùng nhau',
     }),
   }),
 
