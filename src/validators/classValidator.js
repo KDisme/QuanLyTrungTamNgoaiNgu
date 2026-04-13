@@ -22,11 +22,13 @@ const validateCreateClassData = (data) => {
   const { name, start_date, end_date, capacity, sessions } = data;
 
   // Validate required fields
-  validateRequiredFields(data, ['name', 'start_date', 'end_date', 'capacity', 'sessions']);
+  validateRequiredFields(data, ['name', 'start_date', 'capacity', 'sessions']);
 
-  // Validate dates
-  validateDateRange(start_date, end_date);
-  validateEndDateNotInPast(end_date);
+  // Validate end_date only when it is provided
+  if (end_date) {
+    validateDateRange(start_date, end_date);
+    validateEndDateNotInPast(end_date);
+  }
 
   // Validate capacity & sessions
   validateCapacity(capacity);
@@ -43,11 +45,11 @@ const validateCreateClassData = (data) => {
  */
 const validateUpdateClassData = (currentClass, updateData) => {
   const startDate = updateData.start_date || currentClass.start_date;
-  const endDate = updateData.end_date || currentClass.end_date;
 
-  // Validate dates nếu có thay đổi
-  if (updateData.start_date || updateData.end_date) {
-    validateDateRange(startDate, endDate);
+  // If end_date is provided explicitly, validate it against the effective start date
+  if (updateData.end_date) {
+    validateDateRange(startDate, updateData.end_date);
+    validateEndDateNotInPast(updateData.end_date);
   }
 
   // Validate capacity & sessions nếu có thay đổi

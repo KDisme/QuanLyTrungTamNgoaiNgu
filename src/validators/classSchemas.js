@@ -17,10 +17,9 @@ const createClassSchema = Joi.object({
       'date.base': 'Ngày bắt đầu phải là ngày hợp lệ',
       'any.required': 'Ngày bắt đầu là bắt buộc',
     }),
-    end_date: Joi.date().required().iso().greater(Joi.ref('start_date')).messages({
+    end_date: Joi.date().iso().optional().greater(Joi.ref('start_date')).messages({
       'date.base': 'Ngày kết thúc phải là ngày hợp lệ',
       'date.greater': 'Ngày kết thúc phải sau ngày bắt đầu',
-      'any.required': 'Ngày kết thúc là bắt buộc',
     }),
     capacity: Joi.number().required().integer().min(1).max(100).messages({
       'number.base': 'Sức chứa phải là số',

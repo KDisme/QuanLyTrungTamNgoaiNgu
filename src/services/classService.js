@@ -8,6 +8,14 @@ const { ERROR_CODES, ERROR_MESSAGES } = require('../constants/errorCodes');
 const { validateId, validateResourceExists } = require('../validators/commonValidators');
 const { validateCreateClassData, validateUpdateClassData } = require('../validators/classValidator');
 
+const computeEndDate = (startDate, sessions) => {
+  const start = new Date(startDate);
+  const weeks = Math.ceil(sessions / 3) - 1;
+  const endDate = new Date(start);
+  endDate.setDate(endDate.getDate() + weeks * 7);
+  return endDate.toISOString().split('T')[0];
+};
+
 /**
  * Class Service
  * Xử lý toàn bộ logic nghiệp vụ cho lớp học
@@ -30,7 +38,12 @@ const classService = {
       validateResourceExists(teacher, 'teacher');
     }
 
-    return await classRepository.create(data);
+    const payload = {
+      ...data,
+      end_date: data.end_date || computeEndDate(data.start_date, data.sessions),
+    };
+
+    return await classRepository.create(payload);
   },
 
   /**
@@ -74,7 +87,15 @@ const classService = {
       validateResourceExists(teacher, 'teacher');
     }
 
-    return await classRepository.update(id, data);
+    const payload = { ...data };
+    const shouldRecomputeEndDate = (data.start_date !== undefined || data.sessions !== undefined) && data.end_date === undefined;
+    if (shouldRecomputeEndDate) {
+      const startDate = data.start_date || existing.start_date;
+      const sessions = data.sessions !== undefined ? data.sessions : existing.sessions;
+      payload.end_date = computeEndDate(startDate, sessions);
+    }
+
+    return await classRepository.update(id, payload);
   },
 
   /**

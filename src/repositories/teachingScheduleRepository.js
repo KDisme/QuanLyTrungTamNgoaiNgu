@@ -15,11 +15,11 @@ const teachingScheduleRepository = {
    * Tạo lịch giảng dạy mới
    * @throws {ApiError} Nếu database error
    */
-  async create({ teacher_id, class_id, teaching_date, start_time, end_time, room }) {
+  async create({ teacher_id, class_id, day_of_week, start_time, end_time, room }) {
     try {
       const result = await pool.query(
-        'INSERT INTO teaching_schedules (teacher_id, class_id, teaching_date, start_time, end_time, room, created_at) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *',
-        [teacher_id, class_id, teaching_date, start_time, end_time, room]
+        'INSERT INTO teaching_schedules (teacher_id, class_id, day_of_week, start_time, end_time, room, created_at) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *',
+        [teacher_id, class_id, day_of_week, start_time, end_time, room]
       );
       return new TeachingSchedule(result.rows[0]);
     } catch (err) {
@@ -68,7 +68,7 @@ const teachingScheduleRepository = {
         FROM teaching_schedules ts
         JOIN teachers t ON ts.teacher_id = t.id
         JOIN classes c ON ts.class_id = c.id
-        ORDER BY ts.teaching_date DESC, ts.start_time ASC
+        ORDER BY ts.day_of_week ASC, ts.start_time ASC
       `);
       return result.rows.map(row => ({
         ...new TeachingSchedule(row),
@@ -94,7 +94,7 @@ const teachingScheduleRepository = {
         JOIN teachers t ON ts.teacher_id = t.id
         JOIN classes c ON ts.class_id = c.id
         WHERE ts.teacher_id = $1
-        ORDER BY ts.teaching_date DESC, ts.start_time ASC
+        ORDER BY ts.day_of_week ASC, ts.start_time ASC
       `, [teacher_id]);
       return result.rows.map(row => ({
         ...new TeachingSchedule(row),
@@ -120,7 +120,7 @@ const teachingScheduleRepository = {
         JOIN teachers t ON ts.teacher_id = t.id
         JOIN classes c ON ts.class_id = c.id
         WHERE ts.class_id = $1
-        ORDER BY ts.teaching_date DESC, ts.start_time ASC
+        ORDER BY ts.day_of_week ASC, ts.start_time ASC
       `, [class_id]);
       return result.rows.map(row => ({
         ...new TeachingSchedule(row),
@@ -138,20 +138,23 @@ const teachingScheduleRepository = {
    * @returns {TeachingSchedule[]}
    * @throws {ApiError} Nếu database error
    */
-  async findByDate(teaching_date) {
+  async findByDate(date) {
     try {
       const result = await pool.query(`
         SELECT ts.*, t.full_name as teacher_name, c.name as class_name
         FROM teaching_schedules ts
         JOIN teachers t ON ts.teacher_id = t.id
         JOIN classes c ON ts.class_id = c.id
-        WHERE ts.teaching_date = $1
+        WHERE ts.day_of_week = EXTRACT(DOW FROM $1::date)
+          AND c.start_date <= $1::date
+          AND c.end_date >= $1::date
         ORDER BY ts.start_time ASC
-      `, [teaching_date]);
+      `, [date]);
       return result.rows.map(row => ({
         ...new TeachingSchedule(row),
         teacher_name: row.teacher_name,
-        class_name: row.class_name
+        class_name: row.class_name,
+        teaching_date: date,
       }));
     } catch (err) {
       console.error('Database error in teachingScheduleRepository.findByDate:', err);
@@ -164,7 +167,7 @@ const teachingScheduleRepository = {
    * @returns {TeachingSchedule|null}
    * @throws {ApiError} Nếu database error
    */
-  async update(id, { teacher_id, class_id, teaching_date, start_time, end_time, room }) {
+  async update(id, { teacher_id, class_id, day_of_week, start_time, end_time, room }) {
     try {
       const current = await this.findById(id);
       if (!current) return null;
@@ -172,15 +175,15 @@ const teachingScheduleRepository = {
       const updated = {
         teacher_id: teacher_id !== undefined ? teacher_id : current.teacher_id,
         class_id: class_id !== undefined ? class_id : current.class_id,
-        teaching_date: teaching_date !== undefined ? teaching_date : current.teaching_date,
+        day_of_week: day_of_week !== undefined ? day_of_week : current.day_of_week,
         start_time: start_time !== undefined ? start_time : current.start_time,
         end_time: end_time !== undefined ? end_time : current.end_time,
         room: room !== undefined ? room : current.room,
       };
 
       const result = await pool.query(
-        'UPDATE teaching_schedules SET teacher_id = $1, class_id = $2, teaching_date = $3, start_time = $4, end_time = $5, room = $6 WHERE id = $7 RETURNING *',
-        [updated.teacher_id, updated.class_id, updated.teaching_date, updated.start_time, updated.end_time, updated.room, id]
+        'UPDATE teaching_schedules SET teacher_id = $1, class_id = $2, day_of_week = $3, start_time = $4, end_time = $5, room = $6 WHERE id = $7 RETURNING *',
+        [updated.teacher_id, updated.class_id, updated.day_of_week, updated.start_time, updated.end_time, updated.room, id]
       );
 
       if (result.rows[0]) {
@@ -213,17 +216,21 @@ const teachingScheduleRepository = {
    * @returns {TeachingSchedule|null}
    * @throws {ApiError} Nếu database error
    */
-  async checkScheduleConflict(teacher_id, teaching_date, start_time, end_time, excludeId = null) {
+  async checkScheduleConflict(teacher_id, day_of_week, start_time, end_time, class_start_date, class_end_date, excludeId = null) {
     try {
       let query = `
-        SELECT * FROM teaching_schedules
-        WHERE teacher_id = $1 AND teaching_date = $2
-        AND ((start_time <= $3 AND end_time > $3) OR (start_time < $4 AND end_time >= $4) OR (start_time >= $3 AND end_time <= $4))
+        SELECT ts.* FROM teaching_schedules ts
+        JOIN classes c ON ts.class_id = c.id
+        WHERE ts.teacher_id = $1
+          AND ts.day_of_week = $2
+          AND ((ts.start_time <= $3 AND ts.end_time > $3) OR (ts.start_time < $4 AND ts.end_time >= $4) OR (ts.start_time >= $3 AND ts.end_time <= $4))
+          AND c.start_date <= $5
+          AND c.end_date >= $6
       `;
-      const params = [teacher_id, teaching_date, start_time, end_time];
+      const params = [teacher_id, day_of_week, start_time, end_time, class_end_date, class_start_date];
 
       if (excludeId) {
-        query += ' AND id != $5';
+        query += ' AND ts.id != $7';
         params.push(excludeId);
       }
 
@@ -241,17 +248,21 @@ const teachingScheduleRepository = {
    * @returns {TeachingSchedule|null}
    * @throws {ApiError} Nếu database error
    */
-  async checkRoomConflict(room, teaching_date, start_time, end_time, excludeId = null) {
+  async checkRoomConflict(room, day_of_week, start_time, end_time, class_start_date, class_end_date, excludeId = null) {
     try {
       let query = `
-        SELECT * FROM teaching_schedules
-        WHERE room = $1 AND teaching_date = $2
-        AND ((start_time <= $3 AND end_time > $3) OR (start_time < $4 AND end_time >= $4) OR (start_time >= $3 AND end_time <= $4))
+        SELECT ts.* FROM teaching_schedules ts
+        JOIN classes c ON ts.class_id = c.id
+        WHERE ts.room = $1
+          AND ts.day_of_week = $2
+          AND ((ts.start_time <= $3 AND ts.end_time > $3) OR (ts.start_time < $4 AND ts.end_time >= $4) OR (ts.start_time >= $3 AND ts.end_time <= $4))
+          AND c.start_date <= $5
+          AND c.end_date >= $6
       `;
-      const params = [room, teaching_date, start_time, end_time];
+      const params = [room, day_of_week, start_time, end_time, class_end_date, class_start_date];
 
       if (excludeId) {
-        query += ' AND id != $5';
+        query += ' AND ts.id != $7';
         params.push(excludeId);
       }
 

@@ -7,9 +7,8 @@ const Joi = require('joi');
 
 const createTeachingScheduleSchema = Joi.object({
   body: Joi.object({
-    teacher_id: Joi.number().integer().required().messages({
+    teacher_id: Joi.number().integer().optional().messages({
       'number.base': 'ID giáo viên phải là số',
-      'any.required': 'ID giáo viên là bắt buộc',
     }),
 
     class_id: Joi.number().integer().required().messages({
@@ -17,15 +16,14 @@ const createTeachingScheduleSchema = Joi.object({
       'any.required': 'ID lớp học là bắt buộc',
     }),
 
-    // Chọn theo các thứ trong tuần (0=Chủ nhật, 1=Thứ 2, ..., 6=Thứ 7)
     day_of_week: Joi.array().items(
       Joi.number().integer().min(0).max(6).messages({
         'number.base': 'Ngày trong tuần phải là số',
         'number.min': 'Ngày trong tuần phải từ 0 đến 6',
         'number.max': 'Ngày trong tuần phải từ 0 đến 6',
       })
-    ).min(1).unique().required().messages({
-      'array.min': 'Phải chọn ít nhất một ngày trong tuần',
+    ).length(3).unique().required().messages({
+      'array.length': 'Phải chọn đúng 3 ngày trong tuần',
       'array.unique': 'Các ngày trong tuần không được trùng nhau',
       'any.required': 'day_of_week là bắt buộc',
     }),
@@ -53,14 +51,18 @@ const createTeachingScheduleSchema = Joi.object({
   params: Joi.object({}),
 });
 
+const createBulkTeachingScheduleSchema = createTeachingScheduleSchema;
+
 const updateTeachingScheduleSchema = Joi.object({
   body: Joi.object({
     class_id: Joi.number().integer().optional().messages({
       'number.base': 'ID lớp học phải là số',
     }),
 
-    teaching_date: Joi.date().iso().optional().messages({
-      'date.base': 'Ngày giảng dạy phải là ngày hợp lệ',
+    day_of_week: Joi.number().integer().min(0).max(6).optional().messages({
+      'number.base': 'Ngày trong tuần phải là số',
+      'number.min': 'Ngày trong tuần phải từ 0 đến 6',
+      'number.max': 'Ngày trong tuần phải từ 0 đến 6',
     }),
 
     start_time: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional().messages({
@@ -74,17 +76,6 @@ const updateTeachingScheduleSchema = Joi.object({
     room: Joi.string().min(1).max(50).optional().messages({
       'string.min': 'Phòng học phải ít nhất 1 ký tự',
       'string.max': 'Phòng học tối đa 50 ký tự',
-    }),
-
-    day_of_week: Joi.array().items(
-      Joi.number().integer().min(0).max(6).messages({
-        'number.base': 'Ngày trong tuần phải là số',
-        'number.min': 'Ngày trong tuần phải từ 0 đến 6',
-        'number.max': 'Ngày trong tuần phải từ 0 đến 6',
-      })
-    ).min(1).unique().optional().messages({
-      'array.min': 'Phải chọn ít nhất một ngày trong tuần',
-      'array.unique': 'Các ngày trong tuần không được trùng nhau',
     }),
   }),
 
@@ -100,5 +91,6 @@ const updateTeachingScheduleSchema = Joi.object({
 
 module.exports = {
   createTeachingScheduleSchema,
+  createBulkTeachingScheduleSchema,
   updateTeachingScheduleSchema,
 };

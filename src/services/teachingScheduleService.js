@@ -9,6 +9,76 @@ const { validateId, validateResourceExists } = require('../validators/commonVali
 const { validateCreateTeachingScheduleData, validateUpdateTeachingScheduleData } = require('../validators/teachingScheduleValidator');
 const dayjs = require('dayjs');
 
+const computeScheduleEndDate = (startDate, dayOfWeekArray, sessions) => {
+  if (!startDate || !Array.isArray(dayOfWeekArray) || dayOfWeekArray.length === 0 || !sessions) {
+    return startDate;
+  }
+
+  const sortedDays = [...new Set(dayOfWeekArray)].sort((a, b) => a - b);
+  const classStart = dayjs(startDate);
+  if (!classStart.isValid()) {
+    return startDate;
+  }
+
+  const startDow = classStart.day();
+  let firstDow = sortedDays.find((dow) => dow >= startDow);
+  let current = classStart;
+
+  if (firstDow === undefined) {
+    firstDow = sortedDays[0];
+    current = classStart.add(7 - startDow + firstDow, 'day');
+  } else {
+    current = classStart.add(firstDow - startDow, 'day');
+  }
+
+  let index = sortedDays.indexOf(firstDow);
+  let lastSessionDate = current;
+
+  for (let i = 1; i < sessions; i += 1) {
+    if (index + 1 < sortedDays.length) {
+      const delta = sortedDays[index + 1] - sortedDays[index];
+      lastSessionDate = lastSessionDate.add(delta, 'day');
+      index += 1;
+    } else {
+      const delta = 7 - sortedDays[index] + sortedDays[0];
+      lastSessionDate = lastSessionDate.add(delta, 'day');
+      index = 0;
+    }
+  }
+
+  return lastSessionDate.format('YYYY-MM-DD');
+};
+
+const expandSchedulesToOccurrences = (schedules, classStartDate, classEndDate) => {
+  const occurrences = [];
+  const classStart = dayjs(classStartDate);
+  const classEnd = dayjs(classEndDate);
+
+  if (!classStart.isValid() || !classEnd.isValid() || classStart.isAfter(classEnd)) {
+    return occurrences;
+  }
+
+  let current = classStart.startOf('day');
+  while (!current.isAfter(classEnd, 'day')) {
+    const currentDow = current.day();
+    schedules.forEach((schedule) => {
+      if (schedule.day_of_week === currentDow) {
+        occurrences.push({
+          ...schedule,
+          teaching_date: current.format('YYYY-MM-DD'),
+        });
+      }
+    });
+    current = current.add(1, 'day');
+  }
+
+  return occurrences.sort((a, b) => {
+    if (a.teaching_date !== b.teaching_date) {
+      return a.teaching_date.localeCompare(b.teaching_date);
+    }
+    return a.start_time.localeCompare(b.start_time);
+  });
+};
 
 /**
  * TeachingSchedule Service
@@ -23,35 +93,84 @@ const teachingScheduleService = {
    * @throws {ConflictException} Nếu có xung đột lịch
    * @throws {ApiError} Nếu dữ liệu không hợp lệ
    */
-  async createTeachingSchedule(data) {
+  async createRecurringTeachingSchedules(data) {
     // Validate dữ liệu
     validateCreateTeachingScheduleData(data);
 
-    // Kiểm tra giáo viên tồn tại
-    const teacher = await teacherRepository.findById(data.teacher_id);
-    validateResourceExists(teacher, 'teacher');
-
-    // Kiểm tra lớp học tồn tại
     const classData = await classRepository.findById(data.class_id);
     validateResourceExists(classData, 'class');
 
-    // Kiểm tra xung đột lịch giáo viên
-    const teacherConflict = await teachingScheduleRepository.checkScheduleConflict(
-      data.teacher_id, data.teaching_date, data.start_time, data.end_time
-    );
-    if (teacherConflict) {
-      throw new ConflictException('Giáo viên đã có lịch giảng dạy trong thời gian này', 'TEACHER_SCHEDULE_CONFLICT');
+    if (!classData.teacher_id) {
+      throw new ApiError(422, 'Lớp học chưa có giáo viên được gán', 'CLASS_TEACHER_NOT_ASSIGNED');
     }
 
-    // Kiểm tra xung đột phòng học
-    const roomConflict = await teachingScheduleRepository.checkRoomConflict(
-      data.room, data.teaching_date, data.start_time, data.end_time
-    );
-    if (roomConflict) {
-      throw new ConflictException('Phòng học đã được sử dụng trong thời gian này', 'ROOM_CONFLICT');
+    if (!classData.start_date || !classData.end_date) {
+      throw new ApiError(422, 'Lớp học phải có ngày bắt đầu và ngày kết thúc', 'CLASS_DATE_RANGE_REQUIRED');
     }
 
-    return await teachingScheduleRepository.create(data);
+    let classStart = dayjs(classData.start_date);
+    let classEnd = dayjs(classData.end_date);
+
+    if (!classStart.isValid() || !classEnd.isValid() || classStart.isAfter(classEnd)) {
+      throw new ApiError(422, 'Ngày bắt đầu của lớp học phải trước ngày kết thúc', 'INVALID_CLASS_DATE_RANGE');
+    }
+
+    const computedEndDate = computeScheduleEndDate(classData.start_date, data.day_of_week, classData.sessions);
+    if (dayjs(computedEndDate).isAfter(classEnd)) {
+      await classRepository.update(classData.id, { end_date: computedEndDate });
+      classEnd = dayjs(computedEndDate);
+    }
+
+    const teacherId = classData.teacher_id;
+    const createdSchedules = [];
+
+    for (const dayOfWeek of data.day_of_week) {
+      const teacherConflict = await teachingScheduleRepository.checkScheduleConflict(
+        teacherId,
+        dayOfWeek,
+        data.start_time,
+        data.end_time,
+        classStart.format('YYYY-MM-DD'),
+        classEnd.format('YYYY-MM-DD')
+      );
+      if (teacherConflict) {
+        throw new ConflictException(
+          `Giáo viên đã có lịch giảng dạy vào thứ ${dayOfWeek}`,
+          'TEACHER_SCHEDULE_CONFLICT'
+        );
+      }
+
+      const roomConflict = await teachingScheduleRepository.checkRoomConflict(
+        data.room,
+        dayOfWeek,
+        data.start_time,
+        data.end_time,
+        classStart.format('YYYY-MM-DD'),
+        classEnd.format('YYYY-MM-DD')
+      );
+      if (roomConflict) {
+        throw new ConflictException(
+          `Phòng học đã được sử dụng vào thứ ${dayOfWeek}`,
+          'ROOM_CONFLICT'
+        );
+      }
+
+      const schedule = await teachingScheduleRepository.create({
+        class_id: data.class_id,
+        teacher_id: teacherId,
+        day_of_week: dayOfWeek,
+        start_time: data.start_time,
+        end_time: data.end_time,
+        room: data.room,
+      });
+      createdSchedules.push(schedule);
+    }
+
+    return expandSchedulesToOccurrences(createdSchedules, classStart.format('YYYY-MM-DD'), classEnd.format('YYYY-MM-DD'));
+  },
+
+  async createTeachingSchedule(data) {
+    return await this.createRecurringTeachingSchedules(data);
   },
 
   /**
@@ -97,7 +216,8 @@ const teachingScheduleService = {
     const classData = await classRepository.findById(class_id);
     validateResourceExists(classData, 'class');
 
-    return await teachingScheduleRepository.findByClassId(class_id);
+    const classSchedules = await teachingScheduleRepository.findByClassId(class_id);
+    return expandSchedulesToOccurrences(classSchedules, classData.start_date, classData.end_date);
   },
 
   /**
@@ -140,31 +260,49 @@ const teachingScheduleService = {
     }
 
     // Nếu có thay đổi thời gian, giáo viên hoặc phòng, kiểm tra xung đột
-    const hasTimeChange = data.teaching_date !== undefined || data.start_time !== undefined || data.end_time !== undefined;
+    const hasTimeChange = data.day_of_week !== undefined || data.start_time !== undefined || data.end_time !== undefined;
     const hasTeacherChange = data.teacher_id !== undefined;
     const hasRoomChange = data.room !== undefined;
 
     if (hasTimeChange || hasTeacherChange || hasRoomChange) {
       const teacherId = data.teacher_id !== undefined ? data.teacher_id : existing.teacher_id;
-      const teachingDate = data.teaching_date !== undefined ? data.teaching_date : existing.teaching_date;
+      const dayOfWeek = data.day_of_week !== undefined ? data.day_of_week : existing.day_of_week;
       const startTime = data.start_time !== undefined ? data.start_time : existing.start_time;
       const endTime = data.end_time !== undefined ? data.end_time : existing.end_time;
       const room = data.room !== undefined ? data.room : existing.room;
 
+      const classData = await classRepository.findById(data.class_id !== undefined ? data.class_id : existing.class_id);
+      validateResourceExists(classData, 'class');
+
+      const classStart = dayjs(classData.start_date);
+      const classEnd = dayjs(classData.end_date);
+
       // Kiểm tra xung đột lịch giáo viên
       const teacherConflict = await teachingScheduleRepository.checkScheduleConflict(
-        teacherId, teachingDate, startTime, endTime, id
+        teacherId,
+        dayOfWeek,
+        startTime,
+        endTime,
+        classStart.format('YYYY-MM-DD'),
+        classEnd.format('YYYY-MM-DD'),
+        id
       );
       if (teacherConflict) {
-        throw new ConflictException('Giáo viên đã có lịch giảng dạy trong thời gian này', 'TEACHER_SCHEDULE_CONFLICT');
+        throw new ConflictException('Giáo viên đã có lịch giảng dạy trùng lặp', 'TEACHER_SCHEDULE_CONFLICT');
       }
 
       // Kiểm tra xung đột phòng học
       const roomConflict = await teachingScheduleRepository.checkRoomConflict(
-        room, teachingDate, startTime, endTime, id
+        room,
+        dayOfWeek,
+        startTime,
+        endTime,
+        classStart.format('YYYY-MM-DD'),
+        classEnd.format('YYYY-MM-DD'),
+        id
       );
       if (roomConflict) {
-        throw new ConflictException('Phòng học đã được sử dụng trong thời gian này', 'ROOM_CONFLICT');
+        throw new ConflictException('Phòng học đã được sử dụng trùng lặp', 'ROOM_CONFLICT');
       }
     }
 
@@ -183,40 +321,9 @@ const teachingScheduleService = {
 
     return await teachingScheduleRepository.delete(id);
   },
- async createBulkSchedule(data) {
-        const { 
-            class_id, 
-            teacher_id, 
-            start_date, 
-            end_date, 
-            start_time, 
-            end_time, 
-            room, 
-            selectedDays 
-        } = data;
-
-        const createdSchedules = [];
-        let currentDate = dayjs(start_date);
-        const lastDate = dayjs(end_date);
-
-        // Vòng lặp rải lịch
-        while (currentDate.isBefore(lastDate) || currentDate.isSame(lastDate)) {
-            const dayOfWeek = currentDate.day(); // 0 (CN) -> 6 (T7)
-            
-            if (selectedDays.includes(dayOfWeek)) {
-                await teachingScheduleRepository.create({
-                    class_id,
-                    teacher_id,
-                    teaching_date: currentDate.format('YYYY-MM-DD'),
-                    start_time,
-                    end_time,
-                    room
-                });
-            }
-            currentDate = currentDate.add(1, 'day');
-        }
-        return { count: "Success" };
-    },
+  async createBulkSchedule(data) {
+    return await this.createRecurringTeachingSchedules(data);
+  },
 
     async getAllSchedules() {
         return await teachingScheduleRepository.findAll();

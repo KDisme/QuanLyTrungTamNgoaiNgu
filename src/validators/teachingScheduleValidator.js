@@ -10,19 +10,14 @@ const { ValidationException } = require('../exceptions');
 function validateCreateTeachingScheduleData(data) {
   const errors = [];
 
-  // teacher_id là bắt buộc
-  if (!data.teacher_id || typeof data.teacher_id !== 'number') {
-    errors.push('teacher_id là bắt buộc và phải là số');
-  }
-
   // class_id là bắt buộc
   if (!data.class_id || typeof data.class_id !== 'number') {
     errors.push('class_id là bắt buộc và phải là số');
   }
 
-  // day_of_week là bắt buộc - phải là mảng không rỗng chứa các số từ 0-6
-  if (!Array.isArray(data.day_of_week) || data.day_of_week.length === 0) {
-    errors.push('day_of_week là bắt buộc - phải chọn ít nhất một ngày trong tuần (0=Chủ nhật, 1=Thứ 2, ..., 6=Thứ 7)');
+  // day_of_week là bắt buộc - phải chọn đúng 3 ngày trong tuần
+  if (!Array.isArray(data.day_of_week) || data.day_of_week.length !== 3) {
+    errors.push('Phải chọn đúng 3 ngày trong tuần (0=Chủ nhật, 1=Thứ 2, ..., 6=Thứ 7)');
   } else {
     const invalidDay = data.day_of_week.find(d => typeof d !== 'number' || d < 0 || d > 6);
     if (invalidDay !== undefined) {
@@ -65,13 +60,10 @@ function validateUpdateTeachingScheduleData(data) {
     }
   }
 
-  // Kiểm tra ngày giảng dạy không phải quá khứ nếu có cập nhật
-  if (data.teaching_date) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const teachingDate = new Date(data.teaching_date);
-    if (teachingDate < today) {
-      errors.push('Ngày giảng dạy không được là ngày trong quá khứ');
+  // Kiểm tra day_of_week nếu có cập nhật
+  if (data.day_of_week !== undefined) {
+    if (typeof data.day_of_week !== 'number' || data.day_of_week < 0 || data.day_of_week > 6) {
+      errors.push('day_of_week khi cập nhật phải là số từ 0 đến 6');
     }
   }
 
