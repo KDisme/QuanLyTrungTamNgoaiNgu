@@ -1,0 +1,25 @@
+<svg width="260" height="96" viewBox="0 0 260 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(84,2)">
+    <path d="M46 2L88 17L79 20V30H13V20L4 17L46 2Z" fill="#0D4A8A"/>
+    <rect x="79" y="19" width="4" height="17" rx="2" fill="#0D4A8A"/>
+    <rect x="77" y="35" width="8" height="5" rx="1.5" fill="#0D4A8A"/>
+
+    <path d="M46 24C60.5 24 72.5 35.6 72.5 50V51H19.5V50C19.5 35.6 31.5 24 46 24Z" fill="white"/>
+    <path d="M46 24C32.3 24 21 35.2 21 49H46V24Z" fill="#0D4A8A"/>
+    <path d="M46 24C59.7 24 71 35.2 71 49H46V24Z" fill="#F39200"/>
+    <path d="M46 24V49" stroke="white" stroke-width="2.5"/>
+    <path d="M24 38C30.5 42 38 44 46 44C54 44 61.5 42 68 38" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M24 49C30.5 45 38 43 46 43C54 43 61.5 45 68 49" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M33 24C29 30.5 27 39.2 27 49" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M59 24C63 30.5 65 39.2 65 49" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+
+    <path d="M6 50L17 52L27 69L46 72V67L27 62L19 49L6 50Z" fill="#0A61AF"/>
+    <path d="M86 50L75 52L65 69L46 72V67L65 62L73 49L86 50Z" fill="#E86D00"/>
+    <path d="M11 54L20 55.5L28 67L46 70V73L25.5 69L16.5 56L11 54Z" fill="#1584DB"/>
+    <path d="M81 54L72 55.5L64 67L46 70V73L66.5 69L75.5 56L81 54Z" fill="#F5850A"/>
+    <path d="M46 72L42.5 75.2L46 77.8L49.5 75.2L46 72Z" fill="#0D4A8A"/>
+  </g>
+
+  <text x="55" y="92" fill="#0D4A8A" font-family="Outfit, Inter, sans-serif" font-size="23" font-weight="800">Edu</text>
+  <text x="113" y="92" fill="#E86D00" font-family="Outfit, Inter, sans-serif" font-size="23" font-weight="800">Manage</text>
+</svg>
