@@ -15,9 +15,9 @@ function validateCreateTeachingScheduleData(data) {
     errors.push('class_id là bắt buộc và phải là số');
   }
 
-  // day_of_week là bắt buộc - phải chọn đúng 3 ngày trong tuần
-  if (!Array.isArray(data.day_of_week) || data.day_of_week.length !== 3) {
-    errors.push('Phải chọn đúng 3 ngày trong tuần (0=Chủ nhật, 1=Thứ 2, ..., 6=Thứ 7)');
+  // day_of_week là bắt buộc - phải chọn từ 1 đến 7 ngày trong tuần
+  if (!Array.isArray(data.day_of_week) || data.day_of_week.length === 0 || data.day_of_week.length > 7) {
+    errors.push('Phải chọn từ 1 đến 7 ngày trong tuần (0=Chủ nhật, 1=Thứ 2, ..., 6=Thứ 7)');
   } else {
     const invalidDay = data.day_of_week.find(d => typeof d !== 'number' || d < 0 || d > 6);
     if (invalidDay !== undefined) {

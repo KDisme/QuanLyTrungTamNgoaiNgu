@@ -4,6 +4,7 @@
  * Tái sử dụng trong services để giảm code duplication
  */
 
+const dayjs = require('dayjs');
 const { ApiError, NotFoundException, ConflictException } = require('../exceptions');
 
 /**
@@ -66,47 +67,6 @@ const validateResourceExists = (resource, resourceType) => {
 };
 
 /**
- * Validate dates hợp lệ
- * @param {Date|string} startDate - Ngày bắt đầu
- * @param {Date|string} endDate - Ngày kết thúc
- * @throws {ApiError} Nếu dates không hợp lệ
- */
-const validateDateRange = (startDate, endDate) => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  if (start >= end) {
-    throw new ApiError(
-      422,
-      'Ngày bắt đầu phải trước ngày kết thúc',
-      'INVALID_DATE_RANGE'
-    );
-  }
-
-  return true;
-};
-
-/**
- * Validate end date không ở quá khứ
- * @param {Date|string} endDate - Ngày kết thúc
- * @throws {ApiError} Nếu end date ở quá khứ
- */
-const validateEndDateNotInPast = (endDate) => {
-  const end = new Date(endDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  if (end < today) {
-    throw new ApiError(
-      422,
-      'Ngày kết thúc phải từ hôm nay trở đi',
-      'END_DATE_IN_PAST'
-    );
-  }
-
-  return true;
-};
-
 /**
  * Validate capacity > 0
  * @param {number} capacity - Sức chứa
@@ -143,6 +103,26 @@ const validateSessions = (sessions) => {
       422,
       'Số buổi học phải lớn hơn 0',
       'INVALID_SESSIONS'
+    );
+  }
+
+  return true;
+};
+
+/**
+ * Validate sessions per week
+ * @param {number} sessionsPerWeek - Số buổi trong tuần
+ */
+const validateSessionsPerWeek = (sessionsPerWeek) => {
+  if (sessionsPerWeek === undefined || sessionsPerWeek === null) {
+    return true; // Optional field
+  }
+
+  if (sessionsPerWeek <= 0 || sessionsPerWeek > 7 || isNaN(sessionsPerWeek)) {
+    throw new ApiError(
+      422,
+      'Số buổi trong tuần phải từ 1 đến 7',
+      'INVALID_SESSIONS_PER_WEEK'
     );
   }
 
@@ -272,10 +252,9 @@ module.exports = {
   validateId,
   validateRequiredFields,
   validateResourceExists,
-  validateDateRange,
-  validateEndDateNotInPast,
   validateCapacity,
   validateSessions,
+  validateSessionsPerWeek,
   validateStringLength,
   validateEmail,
   validatePhone,

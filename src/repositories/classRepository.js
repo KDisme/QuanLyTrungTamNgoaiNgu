@@ -2,6 +2,7 @@
 // Thao tác với bảng classes - Data Access Layer
 
 const { pool } = require('../config/db');
+const dayjs = require('dayjs');
 const Class = require('../models/class');
 const { ApiError } = require('../exceptions');
 
@@ -15,11 +16,14 @@ const classRepository = {
    * Tạo lớp học mới
    * @throws {ApiError} Nếu database error
    */
-  async create({ name, start_date, end_date, capacity, teacher_id, sessions }) {
+  async create({ name, start_date, capacity, teacher_id, sessions, sessions_per_week, end_date = null }) {
     try {
+      const normalizedStartDate = start_date ? dayjs(start_date).format('YYYY-MM-DD') : null;
+      const normalizedEndDate = end_date ? dayjs(end_date).format('YYYY-MM-DD') : null;
+
       const result = await pool.query(
-        'INSERT INTO classes (name, start_date, end_date, capacity, teacher_id, sessions, created_at) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *',
-        [name, start_date, end_date, capacity, teacher_id, sessions]
+        'INSERT INTO classes (name, start_date, capacity, teacher_id, sessions, sessions_per_week, end_date, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) RETURNING *',
+        [name, normalizedStartDate, capacity, teacher_id, sessions, sessions_per_week, normalizedEndDate]
       );
       return new Class(result.rows[0]);
     } catch (err) {
@@ -61,7 +65,7 @@ const classRepository = {
 
       if (classResult.rows.length === 0) return null;
 
-      const classData = classResult.rows[0];
+      const classData = new Class(classResult.rows[0]);
 
       // 2. Lấy danh sách học viên đang thuộc lớp này
       const studentsResult = await pool.query(
@@ -99,8 +103,10 @@ async findAll() {
       ORDER BY c.created_at DESC
     `);
     
-    // Model Class cần nhận thêm field hv_count
-    return result.rows; 
+    return result.rows.map(row => ({
+      ...new Class(row),
+      hv_count: row.hv_count,
+    }));
   } catch (err) {
     console.error('Database error in classRepository.findAll:', err);
     throw new ApiError(500, 'Lỗi lấy danh sách lớp học', 'DATABASE_ERROR');
@@ -112,7 +118,7 @@ async findAll() {
    * @returns {Class|null}
    * @throws {ApiError} Nếu database error
    */
-  async update(id, { name, start_date, end_date, capacity, teacher_id, sessions }) {
+  async update(id, { name, start_date, capacity, teacher_id, sessions, sessions_per_week, end_date }) {
     try {
 
       const current = await this.findById(id);
@@ -120,22 +126,24 @@ async findAll() {
 
       const updated = {
         name: name !== undefined ? name : current.name,
-        start_date: start_date !== undefined ? start_date : current.start_date,
-        end_date: end_date !== undefined ? end_date : current.end_date,
+        start_date: start_date !== undefined ? dayjs(start_date).format('YYYY-MM-DD') : current.start_date,
         capacity: capacity !== undefined ? capacity : current.capacity,
         teacher_id: teacher_id !== undefined ? teacher_id : current.teacher_id,
         sessions: sessions !== undefined ? sessions : current.sessions,
+        sessions_per_week: sessions_per_week !== undefined ? sessions_per_week : current.sessions_per_week,
+        end_date: end_date !== undefined ? (end_date ? dayjs(end_date).format('YYYY-MM-DD') : null) : current.end_date,
       };
 
       const result = await pool.query(
-        'UPDATE classes SET name = $1, start_date = $2, end_date = $3, capacity = $4, teacher_id = $5, sessions = $6 WHERE id = $7 RETURNING *',
+        'UPDATE classes SET name = $1, start_date = $2, capacity = $3, teacher_id = $4, sessions = $5, sessions_per_week = $6, end_date = $7 WHERE id = $8 RETURNING *',
         [
           updated.name,
           updated.start_date,
-          updated.end_date,
           updated.capacity,
           updated.teacher_id,
           updated.sessions,
+          updated.sessions_per_week,
+          updated.end_date,
           id
         ]
       );

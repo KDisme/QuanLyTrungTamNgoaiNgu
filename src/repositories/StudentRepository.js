@@ -3,6 +3,7 @@
 
 const { pool } = require('../config/db');
 const Student = require('../models/student');
+const dayjs = require('dayjs');
 const { ApiError } = require('../exceptions');
 const { STUDENT_STATUS } = require('../constants/studentStatus');
 
@@ -206,9 +207,31 @@ const studentRepository = {
    */
   async completeStudentsForEndedClasses() {
     try {
+      const result = await pool.query(
+        'SELECT id, start_date, sessions, sessions_per_week FROM classes WHERE start_date IS NOT NULL AND sessions IS NOT NULL AND sessions_per_week IS NOT NULL'
+      );
+
+      const classIds = result.rows
+        .filter(row => {
+          const startDate = dayjs(row.start_date);
+          const totalSessions = Number(row.sessions);
+          const weeklySessions = Number(row.sessions_per_week);
+
+          if (!startDate.isValid() || isNaN(totalSessions) || isNaN(weeklySessions) || weeklySessions <= 0) {
+            return false;
+          }
+
+          const durationWeeks = Math.ceil(totalSessions / weeklySessions);
+          const estimatedEndDate = startDate.add(durationWeeks, 'week').startOf('day');
+          return estimatedEndDate.isBefore(dayjs().startOf('day'));
+        })
+        .map(row => row.id);
+
+      if (classIds.length === 0) return;
+
       await pool.query(
-        'UPDATE students SET status = $1 WHERE status = $2 AND class_id IN (SELECT id FROM classes WHERE end_date < CURRENT_DATE)',
-        [STUDENT_STATUS.COMPLETED, STUDENT_STATUS.ENROLLED]
+        'UPDATE students SET status = $1 WHERE status = $2 AND class_id = ANY($3::int[])',
+        [STUDENT_STATUS.COMPLETED, STUDENT_STATUS.ENROLLED, classIds]
       );
     } catch (err) {
       console.error('Database error in studentRepository.completeStudentsForEndedClasses:', err);

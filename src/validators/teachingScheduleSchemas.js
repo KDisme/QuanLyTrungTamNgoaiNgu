@@ -22,8 +22,9 @@ const createTeachingScheduleSchema = Joi.object({
         'number.min': 'Ngày trong tuần phải từ 0 đến 6',
         'number.max': 'Ngày trong tuần phải từ 0 đến 6',
       })
-    ).length(3).unique().required().messages({
-      'array.length': 'Phải chọn đúng 3 ngày trong tuần',
+    ).min(1).max(7).unique().required().messages({
+      'array.min': 'Phải chọn ít nhất 1 ngày trong tuần',
+      'array.max': 'Không được chọn quá 7 ngày trong tuần',
       'array.unique': 'Các ngày trong tuần không được trùng nhau',
       'any.required': 'day_of_week là bắt buộc',
     }),

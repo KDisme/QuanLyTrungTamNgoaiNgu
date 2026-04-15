@@ -11,8 +11,8 @@ const ERROR_CODES = {
   CLASS_INVALID_DATES: 'CLASS_003',
   CLASS_INVALID_CAPACITY: 'CLASS_004',
   CLASS_INVALID_SESSIONS: 'CLASS_005',
-  CLASS_END_DATE_IN_PAST: 'CLASS_006',
-  CLASS_CREATION_FAILED: 'CLASS_007',
+  CLASS_SCHEDULE_MISMATCH: 'CLASS_006',
+  CLASS_CREATION_FAILED: 'CLASS_008',
   
   // Class - Update
   CLASS_UPDATE_FAILED: 'CLASS_008',
@@ -42,11 +42,11 @@ const ERROR_CODES = {
 const ERROR_MESSAGES = {
   [ERROR_CODES.CLASS_NOT_FOUND]: 'Không tìm thấy lớp học',
   [ERROR_CODES.STUDENT_EMAIL_DUPLICATE]: 'Email đã được sử dụng bởi học viên đang học',
-  [ERROR_CODES.CLASS_MISSING_REQUIRED_FIELDS]: 'Thiếu dữ liệu bắt buộc (tên, ngày bắt đầu, ngày kết thúc, sức chứa, số buổi)',
-  [ERROR_CODES.CLASS_INVALID_DATES]: 'Ngày bắt đầu phải trước ngày kết thúc',
+  [ERROR_CODES.CLASS_MISSING_REQUIRED_FIELDS]: 'Thiếu dữ liệu bắt buộc (tên, ngày bắt đầu, sức chứa, số buổi, số buổi trong tuần)',
+  [ERROR_CODES.CLASS_INVALID_DATES]: 'Ngày bắt đầu không hợp lệ',
   [ERROR_CODES.CLASS_INVALID_CAPACITY]: 'Sức chứa phải lớn hơn 0',
   [ERROR_CODES.CLASS_INVALID_SESSIONS]: 'Số buổi học phải lớn hơn 0',
-  [ERROR_CODES.CLASS_END_DATE_IN_PAST]: 'Ngày kết thúc phải từ hôm nay trở đi',
+  [ERROR_CODES.CLASS_SCHEDULE_MISMATCH]: 'Số buổi học của lớp không trùng với tổng số lịch học',
   [ERROR_CODES.CLASS_CREATION_FAILED]: 'Tạo lớp học thất bại',
   [ERROR_CODES.CLASS_UPDATE_FAILED]: 'Cập nhật lớp học thất bại',
   [ERROR_CODES.CLASS_NO_FIELDS_TO_UPDATE]: 'Không có dữ liệu cần cập nhật',

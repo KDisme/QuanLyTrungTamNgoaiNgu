@@ -23,11 +23,12 @@ const teachingScheduleController = {
    * Tạo lịch giảng dạy mới
    */
   create: asyncHandler(async (req, res, next) => {
-    const schedule = await teachingScheduleService.createTeachingSchedule(req.body);
+    const schedules = await teachingScheduleService.createTeachingSchedule(req.body);
     res.status(201).json({
       success: true,
       message: 'Tạo lịch giảng dạy thành công',
-      schedule,
+      schedules,
+      total: schedules.length,
     });
   }),
 
