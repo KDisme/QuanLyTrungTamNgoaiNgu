@@ -4,6 +4,7 @@
 const { pool } = require('../config/db');
 const TeachingSchedule = require('../models/teachingSchedule');
 const { ApiError } = require('../exceptions');
+const dayjs = require('dayjs');
 
 /**
  * TeachingSchedule Repository
@@ -15,11 +16,11 @@ const teachingScheduleRepository = {
    * Tạo lịch giảng dạy mới
    * @throws {ApiError} Nếu database error
    */
-  async create({ teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room }) {
+  async create({ teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room, status = 'SCHEDULED' }) {
     try {
       const result = await pool.query(
-        'INSERT INTO teaching_schedules (teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) RETURNING *',
-        [teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room]
+        'INSERT INTO teaching_schedules (teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP) RETURNING *',
+        [teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room, status]
       );
       return new TeachingSchedule(result.rows[0]);
     } catch (err) {
@@ -164,7 +165,7 @@ const teachingScheduleRepository = {
    * @returns {TeachingSchedule|null}
    * @throws {ApiError} Nếu database error
    */
-  async update(id, { teacher_id, class_id, day_of_week, start_time, end_time, room }) {
+  async update(id, { teacher_id, class_id, day_of_week, start_time, end_time, room, status }) {
     try {
       const current = await this.findById(id);
       if (!current) return null;
@@ -176,11 +177,12 @@ const teachingScheduleRepository = {
         start_time: start_time !== undefined ? start_time : current.start_time,
         end_time: end_time !== undefined ? end_time : current.end_time,
         room: room !== undefined ? room : current.room,
+        status: status !== undefined ? status : current.status,
       };
 
       const result = await pool.query(
-        'UPDATE teaching_schedules SET teacher_id = $1, class_id = $2, day_of_week = $3, start_time = $4, end_time = $5, room = $6 WHERE id = $7 RETURNING *',
-        [updated.teacher_id, updated.class_id, updated.day_of_week, updated.start_time, updated.end_time, updated.room, id]
+        'UPDATE teaching_schedules SET teacher_id = $1, class_id = $2, day_of_week = $3, start_time = $4, end_time = $5, room = $6, status = $7 WHERE id = $8 RETURNING *',
+        [updated.teacher_id, updated.class_id, updated.day_of_week, updated.start_time, updated.end_time, updated.room, updated.status, id]
       );
 
       if (result.rows[0]) {
@@ -265,6 +267,95 @@ const teachingScheduleRepository = {
       throw new ApiError(500, 'Lỗi kiểm tra xung đột phòng học từ database', 'DATABASE_ERROR');
     }
   },
-};
 
+  /**
+   * Tạo lịch học bù
+   * @throws {ApiError} Nếu database error
+   */
+  async createMakeupSchedule({ teacher_id, class_id, original_schedule_id, teaching_date, start_time, end_time, room, notes }) {
+    try {
+      const teachingDateDow = dayjs(teaching_date).day();
+      const result = await pool.query(
+        'INSERT INTO teaching_schedules (teacher_id, class_id, original_schedule_id, day_of_week, teaching_date, start_time, end_time, room, status, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP) RETURNING *',
+        [teacher_id, class_id, original_schedule_id, teachingDateDow, teaching_date, start_time, end_time, room, 'MAKEUP', notes || null]
+      );
+      return new TeachingSchedule(result.rows[0]);
+    } catch (err) {
+      console.error('❌ SQL ERROR:', err);  // log full lỗi
+      throw new ApiError(500, 'Lỗi tạo lịch học bù từ database', 'MAKEUP_CREATION_FAILED');
+    }
+  },
+
+  /**
+   * Kiểm tra lịch học bù đã tồn tại cho cùng lịch gốc, ngày và giờ
+   * @returns {TeachingSchedule|null}
+   */
+  async findExistingMakeupSchedule(original_schedule_id, teaching_date, start_time, end_time) {
+    try {
+      const result = await pool.query(
+        `SELECT ts.* FROM teaching_schedules ts
+         WHERE ts.original_schedule_id = $1
+           AND ts.teaching_date = $2::date
+           AND ts.start_time = $3
+           AND ts.end_time = $4
+           AND ts.status = 'MAKEUP'`,
+        [original_schedule_id, teaching_date, start_time, end_time]
+      );
+      if (result.rows[0]) return new TeachingSchedule(result.rows[0]);
+      return null;
+    } catch (err) {
+      console.error('Database error in teachingScheduleRepository.findExistingMakeupSchedule:', err);
+      throw new ApiError(500, 'Lỗi kiểm tra lịch học bù từ database', 'DATABASE_ERROR');
+    }
+  },
+
+  /**
+   * Lấy danh sách lịch học bù
+   * @returns {TeachingSchedule[]}
+   * @throws {ApiError} Nếu database error
+   */
+  async findMakeupSchedules(filters = {}) {
+    try {
+      let query = `
+        SELECT ts.*, t.full_name as teacher_name, c.name as class_name, 
+               ots.teaching_date as original_teaching_date, ots.start_time as original_start_time
+        FROM teaching_schedules ts
+        LEFT JOIN teaching_schedules ots ON ts.original_schedule_id = ots.id
+        LEFT JOIN teachers t ON ts.teacher_id = t.id
+        LEFT JOIN classes c ON ts.class_id = c.id
+        WHERE ts.status = 'MAKEUP'
+      `;
+      const params = [];
+
+      if (filters.class_id) {
+        query += ` AND ts.class_id = $${params.length + 1}`;
+        params.push(filters.class_id);
+      }
+
+      if (filters.teacher_id) {
+        query += ` AND ts.teacher_id = $${params.length + 1}`;
+        params.push(filters.teacher_id);
+      }
+
+      if (filters.original_schedule_id) {
+        query += ` AND ts.original_schedule_id = $${params.length + 1}`;
+        params.push(filters.original_schedule_id);
+      }
+
+      query += ' ORDER BY ts.teaching_date ASC, ts.start_time ASC';
+
+      const result = await pool.query(query, params);
+      return result.rows.map(row => ({
+        ...new TeachingSchedule(row),
+        teacher_name: row.teacher_name,
+        class_name: row.class_name,
+        original_teaching_date: row.original_teaching_date,
+        original_start_time: row.original_start_time,
+      }));
+    } catch (err) {
+      console.error('Database error in teachingScheduleRepository.findMakeupSchedules:', err);
+      throw new ApiError(500, 'Lỗi lấy danh sách lịch học bù từ database', 'DATABASE_ERROR');
+    }
+  },
+};
 module.exports = teachingScheduleRepository;

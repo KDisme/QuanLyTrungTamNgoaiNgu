@@ -39,6 +39,14 @@ function validateCreateTeachingScheduleData(data) {
     }
   }
 
+  // Kiểm tra status nếu có cung cấp
+  if (data.status !== undefined) {
+    const validStatuses = ['SCHEDULED', 'CANCELLED', 'MAKEUP'];
+    if (!validStatuses.includes(data.status)) {
+      errors.push('Status phải là SCHEDULED, CANCELLED hoặc MAKEUP');
+    }
+  }
+
   if (errors.length > 0) {
     throw new ValidationException('Dữ liệu không hợp lệ: ' + errors.join(', '));
   }
@@ -67,6 +75,50 @@ function validateUpdateTeachingScheduleData(data) {
     }
   }
 
+  // Kiểm tra status nếu có cập nhật
+  if (data.status !== undefined) {
+    const validStatuses = ['SCHEDULED', 'CANCELLED', 'MAKEUP'];
+    if (!validStatuses.includes(data.status)) {
+      errors.push('Status phải là SCHEDULED, CANCELLED hoặc MAKEUP');
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new ValidationException('Dữ liệu không hợp lệ: ' + errors.join(', '));
+  }
+}
+
+/**
+ * Validate dữ liệu tạo lịch học bù
+ * @throws {ValidationException} Nếu dữ liệu không hợp lệ
+ */
+function validateCreateMakeupScheduleData(data) {
+  const errors = [];
+
+  // original_schedule_id là bắt buộc
+  if (!data.original_schedule_id || typeof data.original_schedule_id !== 'number') {
+    errors.push('original_schedule_id là bắt buộc và phải là số');
+  }
+
+  // Kiểm tra ngày giảng dạy
+  if (!data.teaching_date || !/^\d{4}-\d{2}-\d{2}$/.test(data.teaching_date)) {
+    errors.push('teaching_date là bắt buộc và phải có định dạng YYYY-MM-DD');
+  }
+
+  // Kiểm tra thời gian hợp lệ (end_time > start_time)
+  if (data.start_time && data.end_time) {
+    const start = new Date(`1970-01-01T${data.start_time}:00`);
+    const end = new Date(`1970-01-01T${data.end_time}:00`);
+    if (end <= start) {
+      errors.push('Thời gian kết thúc phải sau thời gian bắt đầu');
+    }
+  }
+
+  // Kiểm tra phòng học
+  if (!data.room || typeof data.room !== 'string' || data.room.trim().length === 0) {
+    errors.push('room là bắt buộc');
+  }
+
   if (errors.length > 0) {
     throw new ValidationException('Dữ liệu không hợp lệ: ' + errors.join(', '));
   }
@@ -75,4 +127,5 @@ function validateUpdateTeachingScheduleData(data) {
 module.exports = {
   validateCreateTeachingScheduleData,
   validateUpdateTeachingScheduleData,
+  validateCreateMakeupScheduleData,
 };

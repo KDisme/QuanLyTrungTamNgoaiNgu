@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { TEACHING_SCHEDULE_STATUS } = require('../constants/teachingScheduleStatus');
 
 /**
  * TeachingSchedule Validation Schemas
@@ -45,6 +46,10 @@ const createTeachingScheduleSchema = Joi.object({
       'string.max': 'Phòng học tối đa 50 ký tự',
       'any.required': 'Phòng học là bắt buộc',
     }),
+
+    status: Joi.string().valid('SCHEDULED', 'CANCELLED', 'MAKEUP').optional().default('SCHEDULED').messages({
+      'any.only': 'Trạng thái phải là SCHEDULED, CANCELLED hoặc MAKEUP',
+    }),
   }),
 
   query: Joi.object({}),
@@ -78,6 +83,10 @@ const updateTeachingScheduleSchema = Joi.object({
       'string.min': 'Phòng học phải ít nhất 1 ký tự',
       'string.max': 'Phòng học tối đa 50 ký tự',
     }),
+
+    status: Joi.string().valid('SCHEDULED', 'CANCELLED', 'MAKEUP').optional().messages({
+      'any.only': 'Trạng thái phải là SCHEDULED, CANCELLED hoặc MAKEUP',
+    }),
   }),
 
   query: Joi.object({}),
@@ -90,8 +99,62 @@ const updateTeachingScheduleSchema = Joi.object({
   }),
 });
 
+const cancelTeachingScheduleSchema = Joi.object({
+  body: Joi.object({}),
+
+  query: Joi.object({}),
+
+  params: Joi.object({
+    id: Joi.number().integer().required().messages({
+      'any.required': 'ID lịch giảng dạy là bắt buộc',
+      'number.base': 'ID lịch giảng dạy phải là số',
+    }),
+  }),
+});
+
+const createMakeupScheduleSchema = Joi.object({
+  body: Joi.object({
+    original_schedule_id: Joi.number().integer().required().messages({
+      'number.base': 'ID lịch học gốc phải là số',
+      'any.required': 'ID lịch học gốc là bắt buộc',
+    }),
+
+    teaching_date: Joi.string().required().pattern(/^\d{4}-\d{2}-\d{2}$/).messages({
+      'string.pattern.base': 'Ngày giảng dạy phải có định dạng YYYY-MM-DD',
+      'any.required': 'Ngày giảng dạy là bắt buộc',
+    }),
+
+    start_time: Joi.string().required().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).messages({
+      'string.pattern.base': 'Thời gian bắt đầu phải có định dạng HH:MM (24h)',
+      'any.required': 'Thời gian bắt đầu là bắt buộc',
+    }),
+
+    end_time: Joi.string().required().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).messages({
+      'string.pattern.base': 'Thời gian kết thúc phải có định dạng HH:MM (24h)',
+      'any.required': 'Thời gian kết thúc là bắt buộc',
+    }),
+
+    room: Joi.string().required().min(1).max(50).messages({
+      'string.empty': 'Phòng học không được để trống',
+      'string.min': 'Phòng học phải ít nhất 1 ký tự',
+      'string.max': 'Phòng học tối đa 50 ký tự',
+      'any.required': 'Phòng học là bắt buộc',
+    }),
+
+    notes: Joi.string().optional().max(500).messages({
+      'string.max': 'Ghi chú tối đa 500 ký tự',
+    }),
+  }),
+
+  query: Joi.object({}),
+
+  params: Joi.object({}),
+});
+
 module.exports = {
   createTeachingScheduleSchema,
   createBulkTeachingScheduleSchema,
   updateTeachingScheduleSchema,
+  cancelTeachingScheduleSchema,
+  createMakeupScheduleSchema,
 };
