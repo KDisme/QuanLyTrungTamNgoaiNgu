@@ -1,289 +1,279 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Edit2, Trash2, X, Search, Calendar } from "lucide-react";
-// Chỉnh lại đường dẫn lùi ra 2 cấp để vào đúng thư mục api
+import { Plus, Edit2, Trash2, Search, X } from "lucide-react";
 import {
-    apiGetAllStudents,
-    apiCreateStudent,
-    apiUpdateStudent,
-    apiDeleteStudent,
+  apiGetAllStudents,
+  apiCreateStudent,
+  apiUpdateStudent,
+  apiDeleteStudent,
 } from "../../api/axios";
 
-// Chỉnh lại đường dẫn lùi ra 2 cấp để vào đúng thư mục styles
 import "../../styles/global.css";
 import "../../styles/table.css";
 import "../../styles/form.css";
 
-// Định nghĩa Interface (Nên chuyển vào src/@types/index.ts để dùng chung)
 interface StudentItem {
-    id: number;
-    name: string;
-    email: string;
-    birth_date: string;
-    citizen_id: string;
-    target_score: number;
-    created_at: string;
+  id: number;
+  name: string;
+  email: string;
+  birth_date: string;
+  citizen_id: string;
+  target_score: number;
+  created_at: string;
 }
 
 const StudentManagement: React.FC = () => {
-    const [students, setStudents] = useState<StudentItem[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [keyword, setKeyword] = useState("");
-    const [showForm, setShowForm] = useState(false);
-    const [editingStudent, setEditingStudent] = useState<StudentItem | null>(null);
+  const [students, setStudents] = useState<StudentItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<StudentItem | null>(null);
 
-    const [formData, setFormData] = useState({
-        name: "",
-        email: "",
-        birth_date: "",
-        citizen_id: "",
-        target_score: "",
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    birth_date: "",
+    citizen_id: "",
+    target_score: "",
+  });
+
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      const res = await apiGetAllStudents();
+      let rawData: any[] = [];
+      if (Array.isArray(res.data)) {
+        rawData = res.data;
+      } else if (res.data?.students) {
+        rawData = res.data.students;
+      } else if (res.data?.data) {
+        rawData = res.data.data;
+      }
+
+      const formatted = rawData.map((s: any) => ({
+        id: s.id,
+        name: s.name || "",
+        email: s.email || "",
+        birth_date: s.birth_date ? s.birth_date.split("T")[0] : "",
+        citizen_id: s.citizen_id || "",
+        target_score: Number(s.target_score || 0),
+        created_at: s.created_at || new Date().toISOString(),
+      }));
+
+      setStudents(formatted);
+    } catch (error) {
+      console.error("Lỗi lấy danh sách học viên:", error);
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const openCreate = () => {
+    setEditingStudent(null);
+    setFormData({ name: "", email: "", birth_date: "", citizen_id: "", target_score: "" });
+    setShowForm(true);
+  };
+
+  const openEdit = (s: StudentItem) => {
+    setEditingStudent(s);
+    setFormData({
+      name: s.name,
+      email: s.email,
+      birth_date: s.birth_date,
+      citizen_id: s.citizen_id,
+      target_score: String(s.target_score),
     });
+    setShowForm(true);
+  };
 
-    const [errors, setErrors] = useState<any>({});
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-    const fetchStudents = async () => {
-        try {
-            setLoading(true);
-            const res = await apiGetAllStudents();
-            const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+    if (!formData.name.trim() || !formData.citizen_id.trim() || !formData.birth_date) {
+      alert("Vui lòng nhập đầy đủ Tên, CCCD và Ngày sinh!");
+      return;
+    }
 
-            setStudents(
-                data.map((s: any) => ({
-                    id: Number(s.id),
-                    name: s.name ?? "",
-                    email: s.email ?? "",
-                    birth_date: s.birth_date ? String(s.birth_date).split("T")[0] : "",
-                    citizen_id: s.citizen_id ?? "",
-                    target_score: Number(s.target_score ?? 0),
-                    created_at: s.created_at ?? new Date().toISOString(),
-                }))
-            );
-        } catch (e) {
-            console.error("Lỗi tải học viên:", e);
-            setStudents([]);
-        } finally {
-            setLoading(false);
-        }
-    };
+    try {
+      const payload = {
+        name: formData.name.trim(),
+        email: formData.email.trim() || null,
+        birth_date: formData.birth_date,
+        citizen_id: formData.citizen_id.trim(),
+        target_score: Number(formData.target_score) || 0,
+      };
 
-    useEffect(() => {
-        fetchStudents();
-    }, []);
+      if (editingStudent) {
+      
+        await apiUpdateStudent(editingStudent.id, payload);
+        alert("Cập nhật học viên thành công!");
+      } else {
+      
+        await apiCreateStudent(payload);
+        alert("Thêm học viên thành công!");
+      }
 
-    const validateForm = () => {
-        const next: any = {};
-        if (!formData.name.trim()) next.name = "Tên học viên bắt buộc";
-        if (!formData.email.trim()) next.email = "Email bắt buộc";
-        if (!formData.birth_date) next.birth_date = "Ngày sinh bắt buộc";
-        if (!formData.citizen_id.trim()) next.citizen_id = "CCCD bắt buộc";
-        if (formData.target_score === "") next.target_score = "Điểm mục tiêu bắt buộc";
+      setShowForm(false);
+      fetchStudents(); 
+    } catch (error: any) {
+      console.log("CHI TIẾT LỖI:", error.response?.data);
+      const serverData = error.response?.data;
 
-        setErrors(next);
-        return Object.keys(next).length === 0;
-    };
+      if (serverData?.errors) {
+       
+        const detailMsg = Object.entries(serverData.errors)
+          .map(([key, val]) => {
+            const field = key === 'citizen_id' ? 'CCCD' : key;
+            return `${field}: ${Array.isArray(val) ? val.join(", ") : val}`;
+          })
+          .join("\n");
+        alert(`Dữ liệu không hợp lệ:\n${detailMsg}`);
+      } else {
+        alert(serverData?.message || "Lỗi hệ thống, vui lòng thử lại.");
+      }
+    }
+  };
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setFormData((p) => ({ ...p, [name]: value }));
-        if (errors[name]) setErrors((p: any) => ({ ...p, [name]: "" }));
-    };
+  
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa học viên này?")) return;
+    try {
+      await apiDeleteStudent(id);
+      fetchStudents();
+    } catch (error) {
+      alert("Xóa học viên thất bại.");
+    }
+  };
 
-    const openCreate = () => {
-        setEditingStudent(null);
-        setFormData({ name: "", email: "", birth_date: "", citizen_id: "", target_score: "" });
-        setErrors({});
-        setShowForm(true);
-    };
-
-    const openEdit = (s: StudentItem) => {
-        setEditingStudent(s);
-        setFormData({
-            name: s.name,
-            email: s.email,
-            birth_date: s.birth_date,
-            citizen_id: s.citizen_id,
-            target_score: String(s.target_score),
-        });
-        setErrors({});
-        setShowForm(true);
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validateForm()) return;
-
-        setLoading(true);
-        try {
-            if (editingStudent) await apiUpdateStudent(editingStudent.id, formData);
-            else await apiCreateStudent(formData);
-            setShowForm(false);
-            await fetchStudents();
-        } catch (error: any) {
-            alert(error.response?.data?.error || "Lỗi lưu dữ liệu");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDelete = async (id: number) => {
-        if (!window.confirm("Xóa học viên này?")) return;
-        setLoading(true);
-        try {
-            await apiDeleteStudent(id);
-            await fetchStudents();
-        } catch (error: any) {
-            alert(error.response?.data?.message || "Lỗi khi xóa");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const filteredStudents = useMemo(() => {
-        const kw = keyword.toLowerCase().trim();
-        return students.filter(s =>
-            s.name.toLowerCase().includes(kw) ||
-            s.citizen_id.includes(kw) ||
-            `HV${String(s.id).padStart(3, '0')}`.toLowerCase().includes(kw)
-        );
-    }, [students, keyword]);
-
-    return (
-        <div className="page">
-            <div className="page-head">
-                <div>
-                    <h1 className="page-title">Quản lý Học viên</h1>
-                    <p className="page-subtitle">Danh sách học viên đăng ký tại trung tâm</p>
-                </div>
-                <button className="btn-primary" onClick={openCreate}>
-                    <Plus size={18} /> Thêm Học viên
-                </button>
-            </div>
-
-            <div className="card toolbar-card">
-                <div className="searchbar" style={{ maxWidth: '400px' }}>
-                    <Search size={18} className="search-icon" />
-                    <input
-                        type="text"
-                        placeholder="Tìm theo Mã HV, tên, CCCD..."
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                    />
-                </div>
-            </div>
-
-            <div className="card table-card">
-                <div className="table-wrap">
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th style={{ width: 100 }}>Mã HV</th>
-                                <th>Họ tên</th>
-                                <th>Email</th>
-                                <th className="th-center">CCCD</th>
-                                <th className="th-center">Điểm MT</th>
-                                <th className="th-center">Ngày nhập học</th>
-                                <th className="th-right">Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredStudents.length > 0 ? (
-                                filteredStudents.map((s) => (
-                                    <tr key={s.id}>
-                                        <td className="td-mono text-bold" style={{ color: '#01000d' }}>
-                                            {`HV${String(s.id).padStart(3, '0')}`}
-                                        </td>
-                                        <td className="td-strong">{s.name}</td>
-                                        <td>{s.email}</td>
-                                        <td className="td-center">{s.citizen_id}</td>
-                                        <td className="td-center">
-                                            <span className="badge-score" style={{ background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 600 }}>
-                                                {s.target_score}
-                                            </span>
-                                        </td>
-                                        <td className="td-center">
-                                            <div className="cell-flex-center">
-                                                <Calendar size={14} className="text-muted" />
-                                                <span>{new Date(s.created_at).toLocaleDateString("vi-VN")}</span>
-                                            </div>
-                                        </td>
-                                        <td className="td-right">
-                                            <div className="actions">
-                                                <button className="icon-btn edit" onClick={() => openEdit(s)} title="Sửa">
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button className="icon-btn delete" onClick={() => handleDelete(s.id)} title="Xóa">
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={7} className="td-center py-10 text-muted">
-                                        {loading ? "Đang tải dữ liệu..." : "Không tìm thấy học viên phù hợp"}
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {showForm && (
-                <div className="modal-overlay">
-                    <div className="modal">
-                        <div className="modal-head">
-                            <h2 className="modal-title">{editingStudent ? "Cập nhật học viên" : "Học viên mới"}</h2>
-                            <button className="modal-close" onClick={() => setShowForm(false)}><X size={20} /></button>
-                        </div>
-                        <div className="modal-body">
-                            <form className="form" onSubmit={handleSubmit}>
-                                <div className="form-group">
-                                    <label className="label">Họ tên <span className="req">*</span></label>
-                                    <input name="name" value={formData.name} onChange={handleInputChange} className="input" placeholder="Nhập họ và tên" />
-                                    {errors.name && <p className="error-text">{errors.name}</p>}
-                                </div>
-
-                                <div className="form-row-2">
-                                    <div className="form-group">
-                                        <label className="label">Email <span className="req">*</span></label>
-                                        <input name="email" type="email" value={formData.email} onChange={handleInputChange} className="input" placeholder="example@gmail.com" />
-                                        {errors.email && <p className="error-text">{errors.email}</p>}
-                                    </div>
-                                    <div className="form-group">
-                                        <label className="label">CCCD <span className="req">*</span></label>
-                                        <input name="citizen_id" value={formData.citizen_id} onChange={handleInputChange} className="input" placeholder="Số định danh" />
-                                        {errors.citizen_id && <p className="error-text">{errors.citizen_id}</p>}
-                                    </div>
-                                </div>
-
-                                <div className="form-row-2">
-                                    <div className="form-group">
-                                        <label className="label">Ngày sinh <span className="req">*</span></label>
-                                        <input name="birth_date" type="date" value={formData.birth_date} onChange={handleInputChange} className="input" />
-                                        {errors.birth_date && <p className="error-text">{errors.birth_date}</p>}
-                                    </div>
-                                    <div className="form-group">
-                                        <label className="label">Điểm mục tiêu <span className="req">*</span></label>
-                                        <input name="target_score" type="number" value={formData.target_score} onChange={handleInputChange} className="input" placeholder="Ví dụ: 990" />
-                                        {errors.target_score && <p className="error-text">{errors.target_score}</p>}
-                                    </div>
-                                </div>
-
-                                <div className="form-actions">
-                                    <button type="button" className="btn-outline" onClick={() => setShowForm(false)}>Hủy</button>
-                                    <button type="submit" className="btn-save" disabled={loading}>
-                                        {loading ? "Đang xử lý..." : "Lưu thông tin"}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+ 
+  const filteredStudents = useMemo(() => {
+    const kw = keyword.toLowerCase().trim();
+    return students.filter((s) =>
+      s.name.toLowerCase().includes(kw) ||
+      s.citizen_id.includes(kw) ||
+      `hv${String(s.id).padStart(3, "0")}`.includes(kw)
     );
+  }, [students, keyword]);
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <h1 className="page-title">Quản lý Học viên</h1>
+        <button className="btn-primary" onClick={openCreate}>
+          <Plus size={18} /> Thêm học viên
+        </button>
+      </div>
+
+      <div className="card">
+        <div className="searchbar">
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Tìm theo tên, mã HV hoặc CCCD..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="card table-card">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Mã HV</th>
+              <th>Tên</th>
+              <th>Email</th>
+              <th>CCCD</th>
+              <th>Điểm</th>
+              <th>Ngày đăng ký</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={7} style={{ textAlign: "center" }}>Đang tải dữ liệu...</td></tr>
+            ) : filteredStudents.length > 0 ? (
+              filteredStudents.map((s) => (
+                <tr key={s.id}>
+                  <td>{`HV${String(s.id).padStart(3, "0")}`}</td>
+                  <td style={{ fontWeight: 600 }}>{s.name}</td>
+                  <td>{s.email}</td>
+                  <td>{s.citizen_id}</td>
+                  <td>{s.target_score}</td>
+                  <td>{new Date(s.created_at).toLocaleDateString("vi-VN")}</td>
+                  <td>
+                    <button onClick={() => openEdit(s)} className="btn-icon">
+                      <Edit2 size={16} />
+                    </button>
+                    <button onClick={() => handleDelete(s.id)} className="btn-icon text-danger">
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr><td colSpan={7} style={{ textAlign: "center" }}>Không tìm thấy học viên.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showForm && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-head">
+              <h3 className="modal-title">{editingStudent ? "Sửa học viên" : "Thêm học viên mới"}</h3>
+              <button className="modal-close" onClick={() => setShowForm(false)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={handleSubmit} className="form">
+                <div className="form-group">
+                  <label className="label">Họ và tên <span className="req">*</span></label>
+                  <input className="input" name="name" value={formData.name} onChange={handleInputChange} placeholder="Nguyễn Văn A" required />
+                </div>
+                
+                <div className="form-row-2">
+                  <div className="form-group">
+                    <label className="label">Email</label>
+                    <input className="input" name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="email@gmail.com" />
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Ngày sinh <span className="req">*</span></label>
+                    <input type="date" className="input" name="birth_date" value={formData.birth_date} onChange={handleInputChange} required />
+                  </div>
+                </div>
+
+                <div className="form-row-2">
+                  <div className="form-group">
+                    <label className="label">CCCD <span className="req">*</span></label>
+                    <input className="input" name="citizen_id" value={formData.citizen_id} onChange={handleInputChange} placeholder="Số CCCD" required />
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Điểm mục tiêu</label>
+                    <input type="number" className="input" name="target_score" value={formData.target_score} onChange={handleInputChange} placeholder="0" />
+                  </div>
+                </div>
+
+                <div className="form-actions">
+                  <button type="button" className="btn-cancel" onClick={() => setShowForm(false)}>Hủy</button>
+                  <button type="submit" className="btn-save">Lưu thông tin</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default StudentManagement;

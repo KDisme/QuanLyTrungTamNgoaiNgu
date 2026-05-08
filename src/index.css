@@ -1,11 +1,13 @@
+/* src/index.css */
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* Thiết lập chế độ màu sáng mặc định cho hệ thống quản lý */
+  color-scheme: light;
+  color: #0f172a;
+  background-color: #f8fafc;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -13,56 +15,72 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+/* Reset cơ bản để đảm bảo kích thước hiển thị chính xác */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
-a:hover {
-  color: #535bf2;
+
+html, body {
+  height: 100%;
+  width: 100%;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
+  /* Xóa display: flex và place-items: center cũ để tránh lệch giao diện */
+  display: block; 
   min-width: 320px;
   min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  background-color: #f3f4f6; /* Sử dụng màu nền xám nhạt của hệ thống */
 }
 
-@media (prefers-color-scheme: light) {
+/* Cấu hình cho container chính của React */
+#root {
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Thiết lập mặc định cho các liên kết */
+a {
+  font-weight: 500;
+  color: #2563eb;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+a:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+/* Đồng bộ hóa các thành phần nhập liệu và nút bấm */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Reset nút bấm để không bị ảnh hưởng bởi style mặc định của trình duyệt */
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  outline: none;
+}
+
+/* Các lớp hỗ trợ tiện ích nhanh */
+.text-center { text-align: center; }
+.text-muted { color: #64748b; }
+.w-full { width: 100%; }
+
+/* Loại bỏ hiệu ứng Dark Mode mặc định của Vite nếu bạn muốn giữ tông sáng chủ đạo */
+@media (prefers-color-scheme: dark) {
   :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
+    /* Giữ nguyên màu sáng cho giao diện quản trị hoặc cấu hình thêm tại đây */
   }
 }

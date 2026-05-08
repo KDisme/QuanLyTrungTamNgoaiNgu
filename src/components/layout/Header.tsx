@@ -3,7 +3,7 @@ import { Bell, ChevronDown } from "lucide-react";
 const Header = () => {
     return (
         <header className="app-header">
-            <h1 className="app-header-title">Hệ thống Quản lý Trung tâm Đào tạo</h1>
+            <h1 className="app-header-title">Hệ thống Quản lý Trung tâm Tiếng Anh</h1>
 
             <div className="header-right">
                 <div className="bell-wrap" title="Thông báo">

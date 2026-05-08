@@ -1,11 +1,8 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 
 const ProtectedRoute = () => {
-    const token = localStorage.getItem("token"); // Dùng 'token'
-
-    // Nếu không có token thì điều hướng về trang login (path="/")
-    // Nếu path login của bạn là /login thì nên sửa về <Navigate to="/login" replace />
-    return token ? <Outlet /> : <Navigate to="/" replace />;
+    // Tạm thời bỏ qua kiểm tra token để có thể gõ URL chuyển trang tự do
+    return <Outlet />; 
 };
 
-export default ProtectedRoute;git add.
+export default ProtectedRoute;

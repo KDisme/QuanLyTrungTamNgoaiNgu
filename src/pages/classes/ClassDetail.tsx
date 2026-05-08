@@ -1,20 +1,19 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-    ArrowLeft, UserPlus, Users, Calendar,
-    Clock, X, Check, Search, Trash2
+    ArrowLeft, UserPlus, Users,
+    X, Search, Trash2, CheckCircle
 } from "lucide-react";
-// Chỉnh lại đường dẫn import api (lùi ra 2 cấp)
+
 import {
     apiGetClassById,
     apiGetAllTeachers,
     apiGetAllStudents,
     apiAssignTeacher,
-    apiAssignStudents,
-    apiRemoveStudentFromClass // Đảm bảo hàm này đã được export trong axios.ts
+    apiAssignStudentToClass,
+    apiRemoveStudentFromClass
 } from "../../api/axios";
 
-// Chỉnh lại đường dẫn import style (lùi ra 2 cấp)
 import "../../styles/global.css";
 import "../../styles/table.css";
 import "../../styles/form.css";
@@ -23,105 +22,131 @@ const ClassDetail: React.FC = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
+    // State dữ liệu
     const [classInfo, setClassInfo] = useState<any>(null);
-    const [teachers, setTeachers] = useState([]);
-    const [students, setStudents] = useState([]);
+    const [teachers, setTeachers] = useState<any[]>([]);
+    const [students, setStudents] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // State Modal & Form
     const [showTeacherModal, setShowTeacherModal] = useState(false);
     const [showStudentModal, setShowStudentModal] = useState(false);
     const [selectedTeacher, setSelectedTeacher] = useState("");
     const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
     const [studentSearch, setStudentSearch] = useState("");
 
-    useEffect(() => {
-        fetchData();
-    }, [id]);
-
+    // --- FETCH DATA ---
     const fetchData = async () => {
-        setLoading(true);
         try {
-            const resClass = await apiGetClassById(id!);
-            const data = resClass.data?.data || resClass.data;
-            setClassInfo(data);
-
-            if (data?.teacher_id) setSelectedTeacher(String(data.teacher_id));
-
-            const [resT, resS] = await Promise.all([
+            setLoading(true);
+            const [resClass, resT, resS] = await Promise.all([
+                apiGetClassById(id!),
                 apiGetAllTeachers(),
                 apiGetAllStudents()
             ]);
 
-            setTeachers(resT.data?.data || resT.data || []);
-            setStudents(resS.data?.data || resS.data || []);
+            // Lấy thông tin lớp
+            const classData = resClass.data?.class || resClass.data;
+            setClassInfo(classData);
+
+            // Đồng bộ ID giảng viên cho Modal select
+            if (classData?.teacher_id) {
+                setSelectedTeacher(String(classData.teacher_id));
+            } else {
+                setSelectedTeacher("");
+            }
+
+            // Danh sách giảng viên tổng
+            setTeachers(Array.isArray(resT.data) ? resT.data : (resT.data?.teachers || []));
+
+            // Danh sách học viên tổng
+            setStudents(Array.isArray(resS.data) ? resS.data : (resS.data?.students || []));
+
         } catch (err) {
-            console.error("Lỗi tải dữ liệu:", err);
+            console.error("Lỗi khi tải dữ liệu:", err);
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        fetchData();
+    }, [id]);
+
+    // --- LOGIC LỌC HỌC VIÊN CHƯA CÓ TRONG LỚP ---
+    const availableStudents = useMemo(() => {
+        const currentStudentIds = classInfo?.students?.map((s: any) => s.id) || [];
+        return students.filter(s =>
+            !currentStudentIds.includes(s.id) &&
+            (s.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+                s.email?.toLowerCase().includes(studentSearch.toLowerCase()))
+        );
+    }, [students, classInfo, studentSearch]);
+
+    // --- HANDLERS ---
+
     const handleAssignTeacher = async () => {
         if (!selectedTeacher) return;
         try {
             await apiAssignTeacher(id!, { teacher_id: Number(selectedTeacher) });
+            alert("Gán giảng viên thành công!");
             setShowTeacherModal(false);
-            fetchData();
-        } catch (err) {
+            await fetchData(); 
+        } catch (err: any) {
             alert("Lỗi khi gán giảng viên");
         }
     };
 
-    const handleAssignStudents = async () => {
+    const handleAddStudents = async () => {
         if (selectedStudents.length === 0) return;
         try {
-            await apiAssignStudents(id!, { student_ids: selectedStudents });
-            setShowStudentModal(false);
+            setLoading(true);
+            const promises = selectedStudents.map(studentId =>
+                apiAssignStudentToClass(studentId, { class_id: Number(id) })
+            );
+            await Promise.all(promises);
+            
+            alert(`Đã thêm ${selectedStudents.length} học viên thành công!`);
             setSelectedStudents([]);
-            fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.error || "Lỗi khi gán học viên");
+            setShowStudentModal(false);
+            setStudentSearch("");
+            await fetchData();
+        } catch (err) {
+            alert("Lỗi khi thêm học viên");
+        } finally {
+            setLoading(false);
         }
     };
 
-    // Hàm xử lý gỡ học viên khỏi lớp
     const handleRemoveStudent = async (studentId: number) => {
         if (!window.confirm("Bạn có chắc chắn muốn gỡ học viên này khỏi lớp?")) return;
         try {
-            await apiRemoveStudentFromClass(id!, studentId);
-            fetchData();
+            await apiRemoveStudentFromClass(studentId);
+            alert("Đã gỡ học viên thành công");
+            await fetchData();
         } catch (err: any) {
-            alert(err.response?.data?.message || "Lỗi khi gỡ học viên");
+            alert(err.response?.data?.message || "Lỗi gỡ học viên");
         }
     };
 
-    const filteredStudentsList = useMemo(() => {
-        if (!students || !Array.isArray(students)) return [];
-        const currentStudentIds = classInfo?.students?.map((s: any) => s.id) || [];
+    const toggleStudentSelection = (studentId: number) => {
+        setSelectedStudents(prev =>
+            prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId]
+        );
+    };
 
-        return students.filter((s: any) => {
-            const name = s?.name || "";
-            const search = studentSearch || "";
-            const matchSearch = name.toLowerCase().includes(search.toLowerCase()) ||
-                (s.citizen_id && s.citizen_id.includes(search));
-
-            // Chỉ hiện những học viên chưa có trong lớp này
-            return matchSearch && !currentStudentIds.includes(s.id);
-        });
-    }, [students, studentSearch, classInfo, id]);
-
-    if (loading) return <div className="app-main">Đang tải thông tin lớp học...</div>;
+    if (loading && !classInfo) return <div className="page td-center" style={{ padding: '100px' }}>Đang tải dữ liệu...</div>;
 
     return (
         <div className="page">
             <div className="page-head">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <button className="icon-btn edit" onClick={() => navigate("/class-management")}>
+                    <button className="btn-icon" onClick={() => navigate("/class-management")}>
                         <ArrowLeft size={18} />
                     </button>
                     <div>
-                        <h1 className="page-title">{classInfo?.name || "Chi tiết lớp học"}</h1>
-                        <p className="page-subtitle">Quản lý thành viên và lịch trình</p>
+                        <h1 className="page-title">{classInfo?.name || "Chi tiết lớp"}</h1>
+                        <p className="page-subtitle">Quản lý thành viên và giảng viên</p>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -129,53 +154,52 @@ const ClassDetail: React.FC = () => {
                         <UserPlus size={18} /> Gán giảng viên
                     </button>
                     <button className="btn-primary" onClick={() => setShowStudentModal(true)}>
-                        <Users size={18} /> Gán học viên
+                        <Users size={18} /> Thêm học viên
                     </button>
                 </div>
             </div>
 
-            <div className="card toolbar-card" style={{ padding: '24px', marginBottom: '24px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+            {/* THÔNG TIN TỔNG QUAN */}
+            <div className="card toolbar-card" style={{ padding: '20px', marginBottom: '24px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
                 <div className="info-block">
-                    <label className="label text-muted" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Giảng viên</label>
-                    <p className="td-strong" style={{ color: '#4f46e5', margin: '4px 0 0 0' }}>
-                        {classInfo?.teacher_name || "Chưa có"}
+                    <label className="label text-muted">GIẢNG VIÊN</label>
+                    <p className="td-strong" style={{ color: '#4f46e5', marginTop: '4px' }}>
+                        {/* FIX TẠI ĐÂY: Dò tên từ danh sách teachers thay vì dùng classInfo.teacher_name */}
+                        {teachers.find(t => t.id === classInfo?.teacher_id)?.full_name || "Chưa gán"}
                     </p>
                 </div>
                 <div className="info-block">
-                    <label className="label text-muted" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Thời gian</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                        <Calendar size={16} color="#3b82f6" />
-                        <span style={{ fontWeight: 600 }}>
-                            {classInfo?.start_date ? new Date(classInfo.start_date).toLocaleDateString("vi-VN") : "Chưa xác định"}
-                        </span>
-                    </div>
+                    <label className="label text-muted">NGÀY BẮT ĐẦU</label>
+                    <p className="td-strong" style={{ marginTop: '4px' }}>
+                        {classInfo?.start_date ? new Date(classInfo.start_date).toLocaleDateString("vi-VN") : "---"}
+                    </p>
                 </div>
                 <div className="info-block">
-                    <label className="label text-muted" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Số buổi học</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                        <Clock size={16} color="#64748b" />
-                        <span style={{ fontWeight: 600 }}>{classInfo?.sessions || 0} buổi</span>
-                    </div>
+                    <label className="label text-muted">SỐ BUỔI HỌC</label>
+                    <p className="td-strong" style={{ marginTop: '4px' }}>{classInfo?.sessions || 0} buổi</p>
                 </div>
                 <div className="info-block">
-                    <label className="label text-muted" style={{ fontSize: '11px', textTransform: 'uppercase' }}>Sĩ số lớp</label>
+                    <label className="label text-muted">SĨ SỐ</label>
                     <div style={{ marginTop: '4px' }}>
-                        <span className="capacity-badge">
-                            <Users size={14} style={{ marginRight: '6px' }} />
-                            {Array.isArray(classInfo?.students) ? classInfo.students.length : 0} / {classInfo?.capacity || 0}
+                        <span className={`capacity-badge ${classInfo?.students?.length >= classInfo?.capacity ? 'text-danger' : ''}`}>
+                            {classInfo?.students?.length || 0} / {classInfo?.capacity || 0} học viên
                         </span>
                     </div>
                 </div>
             </div>
 
+            {/* BẢNG HỌC VIÊN */}
             <div className="card table-card">
+                <div className="card-header" style={{ padding: '15px 20px', borderBottom: '1px solid #eee' }}>
+                    <h3 style={{ margin: 0, fontSize: '16px' }}>Danh sách học viên lớp</h3>
+                </div>
                 <table className="table">
                     <thead>
                         <tr>
-                            <th>Họ tên học viên</th>
+                            <th>Tên học viên</th>
                             <th>Email</th>
-                            <th className="th-center">CCCD/Mã định danh</th>
-                            <th className="th-right">Thao tác</th>
+                            <th className="td-center">CCCD</th>
+                            <th className="td-right">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -186,101 +210,95 @@ const ClassDetail: React.FC = () => {
                                     <td>{s.email}</td>
                                     <td className="td-center td-mono">{s.citizen_id || "---"}</td>
                                     <td className="td-right">
-                                        <span className="actions">
-                                            <button
-                                                className="icon-btn delete"
-                                                title="Gỡ khỏi lớp"
-                                                onClick={() => handleRemoveStudent(s.id)}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </span>
+                                        <button className="btn-icon text-danger" onClick={() => handleRemoveStudent(s.id)}>
+                                            <Trash2 size={16} />
+                                        </button>
                                     </td>
                                 </tr>
                             ))
                         ) : (
-                            <tr><td colSpan={4} className="td-center py-10 text-muted">Lớp học chưa có học viên.</td></tr>
+                            <tr><td colSpan={4} className="td-center py-10 text-muted">Chưa có học viên.</td></tr>
                         )}
                     </tbody>
                 </table>
             </div>
 
-            {/* POP-UP GÁN GIẢNG VIÊN */}
+            {/* MODAL GÁN GIẢNG VIÊN */}
             {showTeacherModal && (
                 <div className="modal-overlay">
                     <div className="modal" style={{ maxWidth: '400px' }}>
                         <div className="modal-head">
-                            <h2 className="modal-title">Chọn giảng viên</h2>
+                            <h2 className="modal-title">Gán giảng viên</h2>
                             <button className="modal-close" onClick={() => setShowTeacherModal(false)}><X size={20} /></button>
                         </div>
                         <div className="modal-body">
                             <div className="form-group">
-                                <label className="label">Giảng viên khả dụng</label>
-                                <select className="select" value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)}>
+                                <label className="label">Chọn giảng viên giảng dạy <span className="req">*</span></label>
+                                <select className="input" value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)}>
                                     <option value="">-- Chọn giảng viên --</option>
-                                    {teachers.map((t: any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                                    {teachers.map((t: any) => (
+                                        <option key={t.id} value={t.id}>{t.full_name}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="form-actions">
-                                <button className="btn-outline" onClick={() => setShowTeacherModal(false)}>Hủy</button>
-                                <button className="btn-save" onClick={handleAssignTeacher}>Lưu thay đổi</button>
+                                <button className="btn-cancel" onClick={() => setShowTeacherModal(false)}>Hủy</button>
+                                <button className="btn-save" onClick={handleAssignTeacher}>Xác nhận</button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* POP-UP GÁN HỌC VIÊN */}
+            {/* MODAL THÊM HỌC VIÊN */}
             {showStudentModal && (
                 <div className="modal-overlay">
-                    <div className="modal" style={{ maxWidth: '500px' }}>
+                    <div className="modal" style={{ maxWidth: '600px', width: '95%' }}>
                         <div className="modal-head">
                             <h2 className="modal-title">Thêm học viên vào lớp</h2>
-                            <button className="modal-close" onClick={() => setShowStudentModal(false)}><X size={20} /></button>
+                            <button className="modal-close" onClick={() => { setShowStudentModal(false); setSelectedStudents([]); }}><X size={20} /></button>
                         </div>
                         <div className="modal-body">
-                            <div className="searchbar" style={{ marginBottom: '16px' }}>
-                                <Search size={18} color="#64748b" />
-                                <input
-                                    className="input"
-                                    style={{ border: 'none', padding: '0 8px' }}
-                                    placeholder="Tìm tên hoặc CCCD..."
-                                    value={studentSearch}
-                                    onChange={(e) => setStudentSearch(e.target.value)}
-                                />
+                            <div className="form-group">
+                                <label className="label">Tìm kiếm học viên</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#94a3b8' }} />
+                                    <input 
+                                        type="text" className="input" style={{ paddingLeft: '35px' }}
+                                        placeholder="Nhập tên hoặc email..."
+                                        value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)}
+                                    />
+                                </div>
                             </div>
-                            <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                                {filteredStudentsList.length > 0 ? (
-                                    filteredStudentsList.map((s: any) => (
-                                        <div
-                                            key={s.id}
-                                            className={`student-select-item ${selectedStudents.includes(s.id) ? 'selected' : ''}`}
+
+                            <div className="student-list-scroll" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', marginTop: '10px' }}>
+                                {availableStudents.length > 0 ? (
+                                    availableStudents.map((s) => (
+                                        <div 
+                                            key={s.id} 
+                                            className={`student-item ${selectedStudents.includes(s.id) ? 'selected' : ''}`}
+                                            onClick={() => toggleStudentSelection(s.id)}
                                             style={{
-                                                padding: '12px',
-                                                borderBottom: '1px solid #f1f5f9',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                backgroundColor: selectedStudents.includes(s.id) ? '#eff6ff' : 'transparent'
+                                                display: 'flex', alignItems: 'center', padding: '10px 15px', cursor: 'pointer',
+                                                borderBottom: '1px solid #f1f5f9', background: selectedStudents.includes(s.id) ? '#eff6ff' : '#fff'
                                             }}
-                                            onClick={() => setSelectedStudents(prev => prev.includes(s.id) ? prev.filter(i => i !== s.id) : [...prev, s.id])}
                                         >
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontWeight: 600 }}>{s.name}</span>
-                                                <span style={{ fontSize: '12px', color: '#64748b' }}>CCCD: {s.citizen_id || "---"}</span>
+                                            <input type="checkbox" checked={selectedStudents.includes(s.id)} readOnly style={{ marginRight: '15px' }} />
+                                            <div style={{ flex: 1 }}>
+                                                <div className="td-strong" style={{ fontSize: '14px' }}>{s.name}</div>
+                                                <div className="text-muted" style={{ fontSize: '12px' }}>{s.email}</div>
                                             </div>
-                                            {selectedStudents.includes(s.id) && <Check size={16} color="#2563eb" />}
+                                            {selectedStudents.includes(s.id) && <CheckCircle size={16} color="#4f46e5" />}
                                         </div>
                                     ))
                                 ) : (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Không tìm thấy học viên phù hợp</div>
+                                    <div className="td-center" style={{ padding: '30px', color: '#94a3b8' }}>Không có học viên phù hợp.</div>
                                 )}
                             </div>
+
                             <div className="form-actions">
-                                <p style={{ marginRight: 'auto', fontSize: '13px', color: '#64748b' }}>Đã chọn: <b>{selectedStudents.length}</b></p>
-                                <button className="btn-outline" onClick={() => setShowStudentModal(false)}>Hủy</button>
-                                <button className="btn-save" onClick={handleAssignStudents}>Xác nhận thêm</button>
+                                <button className="btn-cancel" onClick={() => { setShowStudentModal(false); setSelectedStudents([]); }}>Hủy bỏ</button>
+                                <button className="btn-save" onClick={handleAddStudents} disabled={selectedStudents.length === 0}>Thêm vào lớp</button>
                             </div>
                         </div>
                     </div>

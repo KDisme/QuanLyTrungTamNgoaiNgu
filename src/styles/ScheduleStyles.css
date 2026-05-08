@@ -1,0 +1,67 @@
+.toolbar-card {
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.week-nav {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.week-nav button {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    background: white;
+    cursor: pointer;
+}
+
+.week-label {
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.filters {
+    display: flex;
+    gap: 10px;
+}
+
+.filters select {
+    flex: 1;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+/* CALENDAR */
+.calendar-card {
+    padding: 15px;
+    height: calc(100vh - 300px);
+}
+
+.rbc-toolbar {
+    display: none;
+}
+
+.rbc-event {
+    background: #3b82f6 !important;
+    border-radius: 8px !important;
+    border: none !important;
+    padding: 4px !important;
+}
+
+/* EVENT */
+.event-box {
+    font-size: 12px;
+}
+
+.event-title {
+    font-weight: bold;
+}
+
+.event-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}

@@ -19,6 +19,8 @@ import StudentManagement from "./pages/students/StudenManagement";
 import TeacherManagement from "./pages/teachers/TeacherManagement";
 import ScheduleManagement from "./pages/schedule/ScheduleManagement";
 
+import HomeScreen from "./pages/home/HomeScreen";
+
 export default function App() {
   return (
     <Router>
@@ -31,7 +33,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           {/* MainLayout bao bọc Sidebar và Header cho các trang quản trị */}
           <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<div className="p-6">Chào mừng quay lại!</div>} />
+            <Route path="/dashboard" element={<HomeScreen />} />
 
             {/* Quản lý lớp học */}
             <Route path="/class-management" element={<ClassManagement />} />
