@@ -311,7 +311,7 @@ const teachingScheduleService = {
       throw new ApiError(422, 'Không thể hủy lịch học bù', 'INVALID_ACTION');
     }
 
-    return await this.updateSchedule(id, { status: 'CANCELLED' });
+    return await teachingScheduleRepository.update(id, { status: 'CANCELLED' });
   },
 
 
@@ -375,6 +375,31 @@ const teachingScheduleService = {
     });
   },
 
+  async undoMakeup(id) {
+    validateId(id, 'schedule');
+
+    const makeupSchedule = await teachingScheduleRepository.findById(id);
+    validateResourceExists(makeupSchedule, 'schedule');
+
+    if (makeupSchedule.status !== 'MAKEUP') {
+      throw new ApiError(422, 'Chỉ có thể hoàn tác lịch học bù', 'INVALID_ACTION');
+    }
+
+    if (!makeupSchedule.original_schedule_id) {
+      throw new ApiError(422, 'Thiếu lịch gốc để hoàn tác', 'MISSING_ORIGINAL_SCHEDULE');
+    }
+
+    const originalSchedule = await teachingScheduleRepository.findById(
+      makeupSchedule.original_schedule_id
+    );
+    validateResourceExists(originalSchedule, 'original_schedule');
+
+    await teachingScheduleRepository.update(originalSchedule.id, { status: 'SCHEDULED' });
+    await teachingScheduleRepository.delete(makeupSchedule.id);
+
+    return await teachingScheduleRepository.findById(originalSchedule.id);
+  },
+
 
   // ================= GET =================
   async getAll() {
@@ -396,6 +421,17 @@ const teachingScheduleService = {
 
   async getByDate(date) {
     return await teachingScheduleRepository.findByDate(date);
+  },
+
+  async getMakeupSchedules(filters = {}) {
+    return await teachingScheduleRepository.findMakeupSchedules(filters);
+  },
+
+  async getMakeupSchedulesByOriginal(originalScheduleId) {
+    validateId(originalScheduleId, 'schedule');
+    return await teachingScheduleRepository.findMakeupSchedules({
+      original_schedule_id: Number(originalScheduleId),
+    });
   },
 
 };

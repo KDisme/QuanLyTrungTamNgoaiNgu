@@ -6,6 +6,11 @@ const TeachingSchedule = require('../models/teachingSchedule');
 const { ApiError } = require('../exceptions');
 const dayjs = require('dayjs');
 
+const normalizeTeachingDate = (value) => {
+  if (!value) return value;
+  return dayjs(value).format('YYYY-MM-DD');
+};
+
 /**
  * TeachingSchedule Repository
  * Xử lý tất cả các thao tác với database cho bảng teaching_schedules
@@ -22,7 +27,10 @@ const teachingScheduleRepository = {
         'INSERT INTO teaching_schedules (teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP) RETURNING *',
         [teacher_id, class_id, day_of_week, teaching_date, start_time, end_time, room, status]
       );
-      return new TeachingSchedule(result.rows[0]);
+      return new TeachingSchedule({
+        ...result.rows[0],
+        teaching_date: normalizeTeachingDate(result.rows[0].teaching_date),
+      });
     } catch (err) {
       console.error('Database error in teachingScheduleRepository.create:', err);
       throw new ApiError(500, 'Lỗi tạo lịch giảng dạy từ database', 'TEACHING_SCHEDULE_CREATION_FAILED');
@@ -45,7 +53,10 @@ const teachingScheduleRepository = {
       `, [id]);
       if (result.rows[0]) {
         return {
-          ...new TeachingSchedule(result.rows[0]),
+          ...new TeachingSchedule({
+            ...result.rows[0],
+            teaching_date: normalizeTeachingDate(result.rows[0].teaching_date),
+          }),
           teacher_name: result.rows[0].teacher_name,
           class_name: result.rows[0].class_name
         };
@@ -72,7 +83,10 @@ const teachingScheduleRepository = {
         ORDER BY ts.teaching_date ASC, ts.start_time ASC
       `);
       return result.rows.map(row => ({
-        ...new TeachingSchedule(row),
+        ...new TeachingSchedule({
+          ...row,
+          teaching_date: normalizeTeachingDate(row.teaching_date),
+        }),
         teacher_name: row.teacher_name,
         class_name: row.class_name
       }));
@@ -98,7 +112,10 @@ const teachingScheduleRepository = {
         ORDER BY ts.teaching_date ASC, ts.start_time ASC
       `, [teacher_id]);
       return result.rows.map(row => ({
-        ...new TeachingSchedule(row),
+        ...new TeachingSchedule({
+          ...row,
+          teaching_date: normalizeTeachingDate(row.teaching_date),
+        }),
         teacher_name: row.teacher_name,
         class_name: row.class_name
       }));
@@ -124,7 +141,10 @@ const teachingScheduleRepository = {
         ORDER BY ts.teaching_date ASC, ts.start_time ASC
       `, [class_id]);
       return result.rows.map(row => ({
-        ...new TeachingSchedule(row),
+        ...new TeachingSchedule({
+          ...row,
+          teaching_date: normalizeTeachingDate(row.teaching_date),
+        }),
         teacher_name: row.teacher_name,
         class_name: row.class_name
       }));
@@ -150,7 +170,10 @@ const teachingScheduleRepository = {
         ORDER BY ts.start_time ASC
       `, [date]);
       return result.rows.map(row => ({
-        ...new TeachingSchedule(row),
+        ...new TeachingSchedule({
+          ...row,
+          teaching_date: normalizeTeachingDate(row.teaching_date),
+        }),
         teacher_name: row.teacher_name,
         class_name: row.class_name,
       }));
@@ -231,7 +254,12 @@ const teachingScheduleRepository = {
       }
 
       const result = await pool.query(query, params);
-      if (result.rows[0]) return new TeachingSchedule(result.rows[0]);
+      if (result.rows[0]) {
+        return new TeachingSchedule({
+          ...result.rows[0],
+          teaching_date: normalizeTeachingDate(result.rows[0].teaching_date),
+        });
+      }
       return null;
     } catch (err) {
       console.error('Database error in teachingScheduleRepository.checkScheduleConflict:', err);
@@ -260,7 +288,12 @@ const teachingScheduleRepository = {
       }
 
       const result = await pool.query(query, params);
-      if (result.rows[0]) return new TeachingSchedule(result.rows[0]);
+      if (result.rows[0]) {
+        return new TeachingSchedule({
+          ...result.rows[0],
+          teaching_date: normalizeTeachingDate(result.rows[0].teaching_date),
+        });
+      }
       return null;
     } catch (err) {
       console.error('Database error in teachingScheduleRepository.checkRoomConflict:', err);
@@ -279,7 +312,10 @@ const teachingScheduleRepository = {
         'INSERT INTO teaching_schedules (teacher_id, class_id, original_schedule_id, day_of_week, teaching_date, start_time, end_time, room, status, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP) RETURNING *',
         [teacher_id, class_id, original_schedule_id, teachingDateDow, teaching_date, start_time, end_time, room, 'MAKEUP', notes || null]
       );
-      return new TeachingSchedule(result.rows[0]);
+      return new TeachingSchedule({
+        ...result.rows[0],
+        teaching_date: normalizeTeachingDate(result.rows[0].teaching_date),
+      });
     } catch (err) {
       console.error('❌ SQL ERROR:', err);  // log full lỗi
       throw new ApiError(500, 'Lỗi tạo lịch học bù từ database', 'MAKEUP_CREATION_FAILED');
@@ -301,7 +337,12 @@ const teachingScheduleRepository = {
            AND ts.status = 'MAKEUP'`,
         [original_schedule_id, teaching_date, start_time, end_time]
       );
-      if (result.rows[0]) return new TeachingSchedule(result.rows[0]);
+      if (result.rows[0]) {
+        return new TeachingSchedule({
+          ...result.rows[0],
+          teaching_date: normalizeTeachingDate(result.rows[0].teaching_date),
+        });
+      }
       return null;
     } catch (err) {
       console.error('Database error in teachingScheduleRepository.findExistingMakeupSchedule:', err);
@@ -346,10 +387,13 @@ const teachingScheduleRepository = {
 
       const result = await pool.query(query, params);
       return result.rows.map(row => ({
-        ...new TeachingSchedule(row),
+        ...new TeachingSchedule({
+          ...row,
+          teaching_date: normalizeTeachingDate(row.teaching_date),
+        }),
         teacher_name: row.teacher_name,
         class_name: row.class_name,
-        original_teaching_date: row.original_teaching_date,
+        original_teaching_date: normalizeTeachingDate(row.original_teaching_date),
         original_start_time: row.original_start_time,
       }));
     } catch (err) {

@@ -23,6 +23,7 @@ router.get('/date/:date', authenticate, teachingScheduleController.getByDate);
 
 // 4. Các route có tham số :id (ĐẶT DƯỚI CÙNG)
 router.patch('/:id/cancel', authenticate, validateRequest(cancelTeachingScheduleSchema), teachingScheduleController.cancel);
+router.patch('/:id/undo-makeup', authenticate, teachingScheduleController.undoMakeup);
 router.get('/:id/makeup', authenticate, teachingScheduleController.getMakeupByOriginal);
 router.get('/:id', authenticate, teachingScheduleController.getById);
 router.put('/:id', authenticate, validateRequest(updateTeachingScheduleSchema), teachingScheduleController.update);

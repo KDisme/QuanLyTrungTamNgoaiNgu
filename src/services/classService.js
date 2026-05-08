@@ -91,7 +91,7 @@ const classService = {
     const createdClass = await classRepository.create(payload);
 
     if (Array.isArray(data.day_of_week) && data.day_of_week.length > 0) {
-      const schedules = await teachingScheduleService.createRecurringTeachingSchedules({
+      const schedules = await teachingScheduleService.createSchedules({
         class_id: createdClass.id,
         teacher_id: data.teacher_id,
         day_of_week: data.day_of_week,

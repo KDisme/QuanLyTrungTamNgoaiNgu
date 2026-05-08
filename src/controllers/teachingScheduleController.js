@@ -154,6 +154,16 @@ const teachingScheduleController = {
       total: schedules.length,
     });
   }),
+
+  undoMakeup: asyncHandler(async (req, res) => {
+    const schedule = await teachingScheduleService.undoMakeup(req.params.id);
+
+    res.json({
+      success: true,
+      message: 'Hoàn tác lịch học bù thành công',
+      schedule,
+    });
+  }),
 };
 
 module.exports = teachingScheduleController;
