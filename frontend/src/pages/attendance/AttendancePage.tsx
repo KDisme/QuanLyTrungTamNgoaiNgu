@@ -155,7 +155,6 @@ export default function AttendancePage() {
                       </td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{s.class_name}</div>
-                        <div style={{ fontSize: 12, color: '#9ca3af' }}>{s.branch_name}</div>
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

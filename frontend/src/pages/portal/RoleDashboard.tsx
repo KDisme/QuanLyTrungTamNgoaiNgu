@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Calendar, ClipboardList, DollarSign, GraduationCap, Users, WalletCards, BadgeCheck, AlertCircle } from 'lucide-react';
+import { BookOpen, Calendar, ClipboardList, GraduationCap, Users, BadgeCheck, AlertCircle } from 'lucide-react';
 import { dashboardApi, schedulesApi, feesApi, mockExamsApi } from '../../api';
 import { useAuth } from '../../hooks/useAuth';
 import { getPrimaryRole, ROLE_LABELS, ROLE_PORTAL_NAMES } from '../../config/roleConfig';
@@ -56,7 +56,6 @@ export default function RoleDashboard() {
   const base = `/${tenantSlug}/${role}`;
   const [stats, setStats] = useState<any>(null);
   const [upcoming, setUpcoming] = useState<any[]>([]);
-  const [studentFees, setStudentFees] = useState<any[]>([]);
   const [mockExams, setMockExams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,13 +64,11 @@ export default function RoleDashboard() {
     Promise.allSettled([
       dashboardApi.getStats(),
       schedulesApi.getUpcoming({ limit: 5 }),
-      role === 'student' ? feesApi.getStudentCollections(user!.id) : Promise.resolve({ data: [] }),
       (role === 'student' || role === 'teacher' || role === 'staff') ? mockExamsApi.getAll({ limit: 5 }) : Promise.resolve({ data: [] }),
-    ]).then(([s, sch, fee, exams]) => {
+    ]).then(([s, sch, exams]) => {
       if (!mounted) return;
       if (s.status === 'fulfilled') setStats(s.value.data);
       if (sch.status === 'fulfilled') setUpcoming(Array.isArray(sch.value.data) ? sch.value.data : sch.value.data?.data || []);
-      if (fee.status === 'fulfilled') setStudentFees(Array.isArray(fee.value.data) ? fee.value.data : fee.value.data?.data || []);
       if (exams.status === 'fulfilled') setMockExams(Array.isArray(exams.value.data) ? exams.value.data : exams.value.data?.data || []);
     }).finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
@@ -100,13 +97,8 @@ export default function RoleDashboard() {
             <StatCard label="Giáo viên" value={stats?.teachers ?? 0} icon={GraduationCap} tone="purple" />
             <StatCard label="Buổi học hôm nay" value={stats?.todaySessions ?? 0} icon={Calendar} tone="orange" />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
-            <div className="finance-tile"><span>Doanh thu tháng</span><strong>{fmt(stats?.revenue?.total)}đ</strong></div>
-            <div className="finance-tile"><span>Chi phí tháng</span><strong>{fmt(stats?.expenses?.total)}đ</strong></div>
-            <div className="finance-tile"><span>Lợi nhuận tạm tính</span><strong>{fmt(stats?.netProfit)}đ</strong></div>
-          </div>
           <div className="portal-grid-2">
-            <div className="card"><h3>Truy cập nhanh</h3><div className="portal-link-grid"><QuickLink to={`${base}/users`} title="Quản lý tài khoản" desc="Tạo, khóa, phân vai trò" icon={Users} /><QuickLink to={`${base}/classes`} title="Quản lý lớp" desc="Lớp, giáo viên, học viên" icon={BookOpen} /><QuickLink to={`${base}/tuition`} title="Tài chính" desc="Học phí và công nợ" icon={DollarSign} /><QuickLink to={`${base}/mock-exams`} title="Thi thử" desc="Kỳ thi và kết quả" icon={ClipboardList} /></div></div>
+            <div className="card"><h3>Truy cập nhanh</h3><div className="portal-link-grid"><QuickLink to={`${base}/users`} title="Quản lý tài khoản" desc="Tạo, khóa, phân vai trò" icon={Users} /><QuickLink to={`${base}/classes`} title="Quản lý lớp" desc="Lớp, giáo viên, học viên" icon={BookOpen} /><QuickLink to={`${base}/mock-exams`} title="Thi thử" desc="Kỳ thi và kết quả" icon={ClipboardList} /></div></div>
             <UpcomingBox upcoming={upcoming} />
           </div>
         </>
@@ -118,10 +110,10 @@ export default function RoleDashboard() {
             <StatCard label="Buổi học hôm nay" value={stats?.todaySessions ?? 0} icon={Calendar} />
             <StatCard label="Lớp đang mở" value={stats?.activeClasses ?? 0} icon={BookOpen} tone="green" />
             <StatCard label="Học viên" value={stats?.students ?? 0} icon={Users} tone="purple" />
-            <StatCard label="Hóa đơn chờ thu" value={stats?.pendingInvoices?.count ?? 0} icon={WalletCards} tone="orange" />
+            <StatCard label="Kỳ thi thử" value={mockExams.length} icon={BadgeCheck} tone="orange" />
           </div>
           <div className="portal-grid-2">
-            <div className="card"><h3>Công việc nhân viên</h3><div className="portal-link-grid"><QuickLink to={`${base}/students`} title="Tiếp nhận học viên" desc="Tạo và cập nhật hồ sơ" icon={UserCheckIcon} /><QuickLink to={`${base}/classes`} title="Ghi danh lớp" desc="Thêm học viên vào lớp" icon={BookOpen} /><QuickLink to={`${base}/tuition`} title="Thu học phí" desc="Theo dõi công nợ" icon={DollarSign} /><QuickLink to={`${base}/mock-exams`} title="Kỳ thi thử" desc="Theo dõi ca thi" icon={ClipboardList} /></div></div>
+            <div className="card"><h3>Công việc nhân viên</h3><div className="portal-link-grid"><QuickLink to={`${base}/students`} title="Tiếp nhận học viên" desc="Tạo và cập nhật hồ sơ" icon={UserCheckIcon} /><QuickLink to={`${base}/classes`} title="Ghi danh lớp" desc="Thêm học viên vào lớp" icon={BookOpen} /><QuickLink to={`${base}/mock-exams`} title="Kỳ thi thử" desc="Theo dõi ca thi" icon={ClipboardList} /></div></div>
             <UpcomingBox upcoming={upcoming} />
           </div>
         </>
@@ -136,7 +128,7 @@ export default function RoleDashboard() {
             <StatCard label="Bài thi cần xem" value={mockExams.length} icon={BadgeCheck} tone="orange" />
           </div>
           <div className="portal-grid-2">
-            <div className="card"><h3>Công cụ giảng dạy</h3><div className="portal-link-grid"><QuickLink to={`${base}/my-classes`} title="Lớp của tôi" desc="Xem lớp đang dạy" icon={BookOpen} /><QuickLink to={`${base}/attendance`} title="Điểm danh" desc="Điểm danh theo buổi học" icon={ClipboardList} /><QuickLink to={`${base}/my-students`} title="Học viên lớp tôi" desc="Theo dõi danh sách học viên" icon={Users} /><QuickLink to={`${base}/grading`} title="Chấm bài" desc="Thi thử được phân công" icon={BadgeCheck} /></div></div>
+            <div className="card"><h3>Công cụ giảng dạy</h3><div className="portal-link-grid"><QuickLink to={`${base}/my-classes`} title="Lớp của tôi" desc="Xem lớp đang dạy" icon={BookOpen} /><QuickLink to={`${base}/attendance`} title="Điểm danh" desc="Điểm danh theo buổi học" icon={ClipboardList} /><QuickLink to={`${base}/grading`} title="Chấm bài" desc="Thi thử được phân công" icon={BadgeCheck} /></div></div>
             <UpcomingBox upcoming={upcoming} />
           </div>
         </>
@@ -147,11 +139,10 @@ export default function RoleDashboard() {
           <div className="stats-grid">
             <StatCard label="Lớp đang học" value={stats?.activeClasses ?? 0} icon={BookOpen} />
             <StatCard label="Lịch học hôm nay" value={stats?.todaySessions ?? 0} icon={Calendar} tone="green" />
-            <StatCard label="Đợt học phí" value={studentFees.length} icon={DollarSign} tone="orange" />
             <StatCard label="Bài thi thử" value={mockExams.length} icon={BadgeCheck} tone="purple" />
           </div>
           <div className="portal-grid-2">
-            <div className="card"><h3>Khu vực học viên</h3><div className="portal-link-grid"><QuickLink to={`${base}/my-schedule`} title="Lịch học của tôi" desc="Xem buổi học sắp tới" icon={Calendar} /><QuickLink to={`${base}/my-fees`} title="Học phí của tôi" desc="Công nợ và lịch sử đóng" icon={DollarSign} /><QuickLink to={`${base}/mock-exams`} title="Thi thử" desc="Làm bài được giao" icon={ClipboardList} /><QuickLink to={`${base}/my-results`} title="Kết quả" desc="Điểm thi và nhận xét" icon={BadgeCheck} /></div></div>
+            <div className="card"><h3>Khu vực học viên</h3><div className="portal-link-grid"><QuickLink to={`${base}/my-schedule`} title="Lịch học của tôi" desc="Xem buổi học sắp tới" icon={Calendar} /><QuickLink to={`${base}/mock-exams`} title="Thi thử" desc="Làm bài được giao" icon={ClipboardList} /></div></div>
             <UpcomingBox upcoming={upcoming} />
           </div>
         </>
@@ -172,7 +163,7 @@ function UpcomingBox({ upcoming }: { upcoming: any[] }) {
             <div key={item.id || idx} className="mini-list-row">
               <div>
                 <strong>{item.class_name || item.className || item.title || 'Buổi học'}</strong>
-                <div>{item.branch_name || item.room_name || item.teacher_name || 'Lịch học'}</div>
+                <div>{item.room_name || item.teacher_name || 'Lịch học'}</div>
               </div>
               <span>{item.session_date ? new Date(item.session_date).toLocaleDateString('vi-VN') : item.date || ''}</span>
             </div>

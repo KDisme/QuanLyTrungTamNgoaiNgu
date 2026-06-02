@@ -50,6 +50,7 @@ export const usersApi = {
   create: (data: object) => api.post('/users', data),
   update: (id: number, data: object) => api.put(`/users/${id}`, data),
   toggleStatus: (id: number) => api.patch(`/users/${id}/toggle-status`),
+  delete: (id: number) => api.delete(`/users/${id}`),
 };
 
 export const branchesApi = {
@@ -166,6 +167,9 @@ export const mockExamsApi = {
   create: (data: object) => api.post('/mock-exams', data),
   update: (id: number, data: object) => api.put(`/mock-exams/${id}`, data),
   delete: (id: number) => api.delete(`/mock-exams/${id}`),
+  start: (mockExamStudentId: number) => api.post(`/mock-exam-students/${mockExamStudentId}/start`),
+  resetInProgress: (mockExamStudentId: number) => api.post(`/mock-exam-students/${mockExamStudentId}/reset-in-progress`),
+  saveAnswer: (mockExamStudentId: number, answer: object) => api.post(`/mock-exam-students/${mockExamStudentId}/save-answer`, { answer }),
   uploadRecording: (mockExamStudentId: number, file: Blob | File) => {
     const form = new FormData();
     const name = file instanceof File ? file.name : `speaking-${Date.now()}.webm`;

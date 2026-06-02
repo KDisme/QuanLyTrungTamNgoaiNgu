@@ -159,7 +159,6 @@ export default function ClassDetailPage() {
             { label: 'Giáo viên', value: cls.teachers?.length || 0 },
             { label: 'Học viên', value: isStudent ? '—' : `${cls.students?.length || 0}/${cls.max_students}` },
             { label: 'Buổi đã học', value: `${cls.schedules?.filter((s: any) => s.status === 'completed').length || 0}/${cls.expected_sessions || '∞'}` },
-            { label: 'Học phí', value: `${parseFloat(cls.expected_fee || 0).toLocaleString('vi-VN')}đ` },
           ].map(s => (
             <div key={s.label} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 12px' }}>
               <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 2 }}>{s.label}</div>
@@ -190,12 +189,10 @@ export default function ClassDetailPage() {
               {[
                 { label: 'Tên lớp', val: cls.name },
                 { label: 'Mã lớp', val: cls.code },
-                { label: 'Cơ sở', val: cls.branch_name },
                 { label: 'Loại lớp', val: cls.class_type === 'fixed' ? 'Có thời hạn' : 'Không thời hạn' },
                 { label: 'Ngày bắt đầu', val: formatDateOnly(cls.start_date) },
                 { label: 'Ngày kết thúc', val: formatDateOnly(cls.end_date) },
                 { label: 'Số buổi', val: cls.expected_sessions || '—' },
-                { label: 'Học phí', val: `${parseFloat(cls.expected_fee || 0).toLocaleString('vi-VN')}đ` },
               ].map(i => (
                 <div key={i.label} className="info-item"><label>{i.label}</label><span>{i.val}</span></div>
               ))}
@@ -227,7 +224,6 @@ export default function ClassDetailPage() {
                 <Avatar name={t.full_name} size={36} />
                 <div>
                   <div style={{ fontWeight: 600 }}>{t.full_name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>{t.teacher_code}</div>
                 </div>
                 {t.is_primary && <span style={{ marginLeft: 'auto', fontSize: 11, background: 'var(--primary-50)', color: 'var(--primary)', padding: '2px 6px', borderRadius: 20, fontWeight: 600 }}>Chính</span>}
               </div>
@@ -246,14 +242,13 @@ export default function ClassDetailPage() {
           <div className="card" style={{ padding: 0 }}>
             <div className="table-container">
               <table>
-                <thead><tr><th>HỌC VIÊN</th><th>MÃ HV</th><th>SĐT</th><th>NGÀY VÀO</th><th>TRẠNG THÁI</th><th></th></tr></thead>
+                <thead><tr><th>HỌC VIÊN</th><th>SĐT</th><th>NGÀY VÀO</th><th>TRẠNG THÁI</th><th></th></tr></thead>
                 <tbody>
                   {cls.students?.length === 0
-                    ? <tr><td colSpan={6}><EmptyState message="Chưa có học viên nào" /></td></tr>
+                    ? <tr><td colSpan={5}><EmptyState message="Chưa có học viên nào" /></td></tr>
                     : cls.students?.map((s: any) => (
                       <tr key={s.id}>
                         <td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={s.full_name} size={32} /><span style={{ fontWeight: 600 }}>{s.full_name}</span></div></td>
-                        <td><span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 700, fontFamily: 'monospace' }}>{s.student_code}</span></td>
                         <td style={{ fontSize: 13 }}>{s.phone}</td>
                         <td style={{ fontSize: 12, color: 'var(--gray-400)' }}>{s.joined_at ? new Date(s.joined_at).toLocaleDateString('vi-VN') : '—'}</td>
                         <td><StatusBadge status={s.status} /></td>

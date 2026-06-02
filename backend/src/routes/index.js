@@ -52,6 +52,7 @@ tenantRouter.get('/users/:id', authenticate, requireSelfOrRole('id', 'admin', 's
 tenantRouter.post('/users', authenticate, requireRole('admin', 'staff'), userCtrl.create);
 tenantRouter.put('/users/:id', authenticate, requireSelfOrRole('id', 'admin', 'staff'), userCtrl.update);
 tenantRouter.patch('/users/:id/toggle-status', authenticate, requireRole('admin'), userCtrl.toggleStatus);
+tenantRouter.delete('/users/:id', authenticate, requireRole('admin'), userCtrl.delete);
 
 // Branches
 tenantRouter.get('/branches', authenticate, requireRole('admin', 'staff', 'teacher'), branchCtrl.getAll);
@@ -139,6 +140,9 @@ tenantRouter.get('/mock-exams/:id', authenticate, examCtrl.getMockExam);
 tenantRouter.post('/mock-exams', authenticate, requireRole('admin', 'staff'), examCtrl.createMockExam);
 tenantRouter.put('/mock-exams/:id', authenticate, requireRole('admin', 'staff'), examCtrl.updateMockExam);
 tenantRouter.delete('/mock-exams/:id', authenticate, requireRole('admin'), examCtrl.deleteMockExam);
+tenantRouter.post('/mock-exam-students/:mockExamStudentId/start', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.startAttempt);
+tenantRouter.post('/mock-exam-students/:mockExamStudentId/reset-in-progress', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.resetInProgressAttempt);
+tenantRouter.post('/mock-exam-students/:mockExamStudentId/save-answer', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.saveAnswer);
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/recording', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), upload.single('file'), examCtrl.uploadSubmissionRecording);
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/submit', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.submitAnswers);
 tenantRouter.patch('/mock-exam-students/:mockExamStudentId/grade', authenticate, requireRole('admin', 'staff', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.gradeStudent);

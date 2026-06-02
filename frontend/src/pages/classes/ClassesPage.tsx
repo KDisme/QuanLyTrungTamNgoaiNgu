@@ -253,10 +253,6 @@ function ClassForm({ initial, branches, teachers, onClose, onSuccess }: { initia
           <input className="form-input" type="number" min={1} value={form.maxStudents} onChange={e => setForm(f => ({ ...f, maxStudents: parseInt(e.target.value) }))} />
         </div>
         <div className="form-group">
-          <label className="form-label">Học phí dự kiến (đ)</label>
-          <input className="form-input" type="number" min={0} value={form.expectedFee} onChange={e => setForm(f => ({ ...f, expectedFee: parseFloat(e.target.value) }))} />
-        </div>
-        <div className="form-group">
           <label className="form-label">Ngày bắt đầu</label>
           <input className="form-input" type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
         </div>
@@ -451,7 +447,7 @@ export default function ClassesPage() {
     ? 'Xem các lớp học bạn đang tham gia'
     : isTeacher
       ? 'Xem các lớp bạn được phân công giảng dạy'
-      : 'Quản lý danh sách các lớp học của trung tâm';
+      : 'Quản lý danh sách các lớp học';
 
   return (
     <div>

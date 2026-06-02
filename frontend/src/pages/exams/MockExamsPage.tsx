@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { CalendarCheck, CheckCircle2, Eye, FileCheck2, Pencil, PlayCircle, Plus, Save, Search, Trash2, UsersRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { classesApi, examSetsApi, mockExamsApi } from '../../api';
@@ -240,7 +239,6 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
 
 export default function MockExamsPage() {
   const { user, tenantSlug } = useAuth();
-  const navigate = useNavigate();
   const roles = user?.roles || [];
   const canManage = roles.includes('admin') || roles.includes('staff');
   const canDelete = roles.includes('admin');
@@ -310,6 +308,10 @@ export default function MockExamsPage() {
   const detailRows = useMemo(() => detail?.students || [], [detail]);
   const currentStudent = isStudent ? detailRows[0] : null;
 
+  const openExamTab = (path: string) => {
+    window.open(path, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div>
       <div className="page-header flex items-center justify-between">
@@ -369,12 +371,15 @@ export default function MockExamsPage() {
                     <td><StatusBadge status={r.status} /></td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        {canManage || isTeacher ? <button className="btn btn-secondary btn-sm" onClick={() => view(r)}><UsersRound size={12} /> DS</button> : null}
+                        {canManage || isTeacher ? <button className="btn btn-secondary btn-sm" onClick={() => view(r)}><UsersRound size={12} /> Danh sách</button> : null}
                         {canManage && <button className="btn btn-secondary btn-sm" onClick={() => edit(r)}><Pencil size={12} /> Sửa</button>}
                         {canDelete && <button className="btn btn-danger btn-sm" onClick={() => setDeleting(r)}><Trash2 size={12} /> Xoá</button>}
                         {isStudent && <button className="btn btn-secondary btn-sm" onClick={() => view(r)}><Eye size={12} /> Chi tiết</button>}
+                        {isStudent && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => openExamTab(`/${tenantSlug}/student/mock-exams/${r.id}/practice`)}><PlayCircle size={12} /> Luyện thi</button>
+                        )}
                         {isStudent && r.status === 'active' && !['graded'].includes(attemptStatus) && (
-                          <button className="btn btn-primary btn-sm" onClick={() => navigate(`/${tenantSlug}/student/mock-exams/${r.id}/take`)}><PlayCircle size={12} /> Vào thi</button>
+                          <button className="btn btn-primary btn-sm" onClick={() => openExamTab(`/${tenantSlug}/student/mock-exams/${r.id}/take`)}><PlayCircle size={12} /> Vào thi thử</button>
                         )}
                       </div>
                     </td>
@@ -389,7 +394,7 @@ export default function MockExamsPage() {
       {showAdd && canManage && <MockExamForm onClose={() => setShowAdd(false)} onSuccess={load} />}
       {editing && canManage && <MockExamForm initial={editing} onClose={() => setEditing(null)} onSuccess={load} />}
       {detail && (
-        <Modal title={isStudent ? `Chi tiết kỳ thi - ${detail.title}` : `Danh sách học viên - ${detail.title}`} size="lg" onClose={() => setDetail(null)}>
+        <Modal title={isStudent ? `Chi tiết kỳ thi - ${detail.title}` : `Danh sách học viên - ${detail.title}`} size={isTeacher ? 'xl' : 'lg'} onClose={() => setDetail(null)}>
           {isStudent ? <StudentResultPanel detail={detail} student={currentStudent} /> : (
             <div className="table-container">
               <table>

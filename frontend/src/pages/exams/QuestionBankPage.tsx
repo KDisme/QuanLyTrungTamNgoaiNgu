@@ -41,19 +41,61 @@ const BLUEPRINTS: Record<string, any[]> = {
     { skill: 'Writing', part: 'Question 8', label: 'Câu 8 - Viết bài luận', type: 'writing_essay', section: 1800, minWords: 300, note: 'Essay tối thiểu 300 từ / 30 phút' },
   ],
   VSTEP_4_SKILLS: [
-    { skill: 'Listening', part: 'Listening Part 1', label: 'Listening Phần 1 - Thông báo/Hướng dẫn ngắn', type: 'group_choice', options: ['A','B','C','D'], audio: true, group: true, qPerGroup: 1, section: 2400, note: '8 câu / audio ngắn 15-20s' },
-    { skill: 'Listening', part: 'Listening Part 2', label: 'Listening Phần 2 - Hội thoại', type: 'group_choice', options: ['A','B','C','D'], audio: true, group: true, qPerGroup: 4, section: 2400, note: '12 câu / mỗi audio 4 câu hỏi' },
-    { skill: 'Listening', part: 'Listening Part 3', label: 'Listening Phần 3 - Bài giảng/Thuyết trình', type: 'group_choice', options: ['A','B','C','D'], audio: true, group: true, qPerGroup: 5, section: 2400, note: '15 câu / mỗi audio 5 câu hỏi' },
-    { skill: 'Reading', part: 'Reading Passage', label: 'Reading - 4 bài đọc dài, mỗi bài 10 câu', type: 'group_choice', options: ['A','B','C','D'], group: true, richText: true, splitScreen: true, qPerGroup: 10, section: 3600, passagesMax: 1, note: 'Split-screen: trái đoạn văn, phải 10 câu hỏi' },
+    { skill: 'Listening', part: 'Listening Part 1', label: 'Listening Phần 1 - Audio chung Part 1', type: 'group_choice', options: ['A','B','C','D'], audio: true, group: true, qPerGroup: 8, section: 2400, note: 'VSTEP: 1 audio chung cho cả Part 1, bên dưới là 8 câu hỏi' },
+    { skill: 'Listening', part: 'Listening Part 2', label: 'Listening Phần 2 - Audio chung Part 2', type: 'group_choice', options: ['A','B','C','D'], audio: true, group: true, qPerGroup: 12, section: 2400, note: 'VSTEP: 1 audio chung cho cả Part 2, bên dưới là 12 câu hỏi' },
+    { skill: 'Listening', part: 'Listening Part 3', label: 'Listening Phần 3 - Audio chung Part 3', type: 'group_choice', options: ['A','B','C','D'], audio: true, group: true, qPerGroup: 15, section: 2400, note: 'VSTEP: 1 audio chung cho cả Part 3, bên dưới là 15 câu hỏi' },
+    { skill: 'Reading', part: 'Reading Part 1', label: 'Reading Phần 1 - 1 bài đọc + 10 câu', type: 'group_choice', options: ['A','B','C','D'], group: true, richText: true, splitScreen: true, qPerGroup: 10, section: 3600, passagesMax: 1, note: 'Split-screen: trái đoạn văn, phải 10 câu hỏi' },
+    { skill: 'Reading', part: 'Reading Part 2', label: 'Reading Phần 2 - 1 bài đọc + 10 câu', type: 'group_choice', options: ['A','B','C','D'], group: true, richText: true, splitScreen: true, qPerGroup: 10, section: 3600, passagesMax: 1, note: 'Split-screen: trái đoạn văn, phải 10 câu hỏi' },
+    { skill: 'Reading', part: 'Reading Part 3', label: 'Reading Phần 3 - 1 bài đọc + 10 câu', type: 'group_choice', options: ['A','B','C','D'], group: true, richText: true, splitScreen: true, qPerGroup: 10, section: 3600, passagesMax: 1, note: 'Split-screen: trái đoạn văn, phải 10 câu hỏi' },
+    { skill: 'Reading', part: 'Reading Part 4', label: 'Reading Phần 4 - 1 bài đọc + 10 câu', type: 'group_choice', options: ['A','B','C','D'], group: true, richText: true, splitScreen: true, qPerGroup: 10, section: 3600, passagesMax: 1, note: 'Split-screen: trái đoạn văn, phải 10 câu hỏi' },
     { skill: 'Writing', part: 'Writing Task 1', label: 'Writing Task 1 - Viết thư/Email', type: 'writing_email_letter', section: 1200, minWords: 120, email: true, note: 'Tối thiểu 120 từ, chiếm 1/3 điểm Writing' },
     { skill: 'Writing', part: 'Writing Task 2', label: 'Writing Task 2 - Viết bài luận', type: 'writing_essay', section: 2400, minWords: 250, note: 'Tối thiểu 250 từ, chiếm 2/3 điểm Writing' },
     { skill: 'Speaking', part: 'Speaking Part 1', label: 'Speaking Phần 1 - Tương tác xã hội', type: 'speaking_social_interaction', group: true, audio: true, section: 180, note: 'Nhập 2 chủ đề, mỗi chủ đề 3 câu hỏi; ghi âm liên tục' },
-    { skill: 'Speaking', part: 'Speaking Part 2', label: 'Speaking Phần 2 - Thảo luận giải pháp', type: 'speaking_solution_discussion', group: true, prep: 60, response: 180, note: '1 tình huống + 3 giải pháp gợi ý' },
-    { skill: 'Speaking', part: 'Speaking Part 3', label: 'Speaking Phần 3 - Phát triển chủ đề', type: 'speaking_topic_development', group: true, image: true, prep: 60, response: 180, note: 'Upload mind-map + 3-4 follow-up questions' },
+    { skill: 'Speaking', part: 'Speaking Part 2', label: 'Speaking Phần 2 - Thảo luận giải pháp', type: 'speaking_solution_discussion', group: true, prep: 60, response: 180, note: 'Tổng 4 phút: 60 giây chuẩn bị + 3 phút nói' },
+    { skill: 'Speaking', part: 'Speaking Part 3', label: 'Speaking Phần 3 - Phát triển chủ đề', type: 'speaking_topic_development', group: true, image: true, prep: 60, response: 240, note: 'Tổng 5 phút: 60 giây chuẩn bị + 4 phút nói' },
   ],
 };
 
 const makeOptions = (labels: string[]) => labels.map(label => ({ optionLabel: label, optionText: '', isCorrect: false, allowEmptyText: false }));
+
+const slug = (value: any) => String(value || '')
+  .trim()
+  .toUpperCase()
+  .replace(/[^A-Z0-9]+/g, '_')
+  .replace(/^_+|_+$/g, '');
+
+const pad2 = (n: number) => String(Math.max(1, n || 1)).padStart(2, '0');
+
+function buildAutoGroupKey(form: any, rule: any) {
+  if (!rule?.group) return '';
+  const base = `${slug(form.formatCode)}_${slug(form.skill)}_${slug(form.part)}`;
+  const seq = parseInt(form.sequenceNo || '1', 10) || 1;
+  const perGroup = rule.qPerGroup || rule.questionsPerGroup || 0;
+  const groupNo = perGroup > 0 ? Math.ceil(seq / perGroup) : 1;
+
+  // VSTEP Listening/Speaking/Reading dùng 1 nhóm cố định theo từng Part.
+  if (form.formatCode === 'VSTEP_4_SKILLS') return base;
+
+  // TOEIC Part 3/4/6/7 gom theo nhóm câu; hệ thống tự tính nhóm dựa trên số thứ tự câu.
+  if (perGroup > 0) return `${base}_GROUP_${pad2(groupNo)}`;
+  return base;
+}
+
+function getGroupContentLabel(form: any, rule: any) {
+  if (form.skill === 'Reading') return 'Bài đọc / đoạn văn chung của Part';
+  if (form.skill === 'Listening') return form.formatCode === 'VSTEP_4_SKILLS' ? 'Hướng dẫn hiển thị trước audio (tuỳ chọn)' : 'Nội dung nhóm audio / hội thoại';
+  if (form.skill === 'Writing') return 'Đề bài / email / nội dung yêu cầu';
+  if (form.skill === 'Speaking') return 'Nội dung đề Speaking / tình huống / chủ đề';
+  return 'Nội dung chung của nhóm';
+}
+
+function getGroupContentPlaceholder(form: any) {
+  if (form.skill === 'Reading') return 'Nhập bài đọc hiển thị bên trái màn hình làm bài.';
+  if (form.skill === 'Listening') return form.formatCode === 'VSTEP_4_SKILLS' ? 'Có thể nhập hướng dẫn chung của Part. Nếu để trống, giao diện thi sẽ dùng hướng dẫn mặc định. Không nhập mã nhóm kỹ thuật ở đây.' : 'Nhập mô tả audio hoặc transcript/ghi chú nội bộ. Audio thật upload ở trường Audio bên dưới.';
+  if (form.skill === 'Writing') return 'Nhập đề bài, email hoặc yêu cầu viết.';
+  if (form.skill === 'Speaking') return 'Nhập chủ đề, tình huống, gợi ý hoặc nội dung hướng dẫn Speaking.';
+  return 'Nhập nội dung chung của nhóm câu hỏi.';
+}
 
 function FileUpload({ label, accept, onUploaded }: { label: string; accept: string; onUploaded: (url: string) => void }) {
   const [busy, setBusy] = useState(false);
@@ -82,7 +124,7 @@ function QuestionForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     sequenceNo: initial?.sequence_no || initial?.sequenceNo || '',
     groupKey: initial?.group_key || initial?.groupKey || '',
     questionText: initial?.question_text || initial?.questionText || '',
-    questionGroup: initial?.question_group || initial?.questionGroup || '',
+    questionGroup: initial?.question_group || initial?.questionGroup || initial?.group?.content || '',
     imageUrl: initial?.image_url || initial?.imageUrl || initial?.media?.imageUrl || '',
     audioUrl: initial?.audio_url || initial?.audioUrl || initial?.media?.audioUrl || '',
     topic: initial?.topic || '',
@@ -105,11 +147,11 @@ function QuestionForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
 
   const changeRule = (part: string) => {
     const next = rules.find(r => r.part === part) || rules[0];
-    setForm((f: any) => ({ ...f, skill: next.skill, part: next.part, questionType: next.type, options: makeOptions(next.options || []), prepSeconds: next.prep || '', responseSeconds: next.response || '', sectionSeconds: next.section || '', minWords: next.minWords || '', groupKey: next.group ? (f.groupKey || `${f.formatCode}-${next.part.replaceAll(' ', '')}-${Date.now()}`) : '' }));
+    setForm((f: any) => ({ ...f, skill: next.skill, part: next.part, questionType: next.type, options: makeOptions(next.options || []), prepSeconds: next.prep || '', responseSeconds: next.response || '', sectionSeconds: next.section || '', minWords: next.minWords || '', groupKey: next.group ? '' : '' }));
   };
   const changeFormat = (formatCode: string) => {
     const next = BLUEPRINTS[formatCode][0];
-    setForm((f: any) => ({ ...f, formatCode, examType: formatCode === 'VSTEP_4_SKILLS' ? 'VSTEP' : 'TOEIC', skill: next.skill, part: next.part, questionType: next.type, options: makeOptions(next.options || []), prepSeconds: next.prep || '', responseSeconds: next.response || '', sectionSeconds: next.section || '', minWords: next.minWords || '', groupKey: next.group ? `${formatCode}-${next.part.replaceAll(' ', '')}-${Date.now()}` : '' }));
+    setForm((f: any) => ({ ...f, formatCode, examType: formatCode === 'VSTEP_4_SKILLS' ? 'VSTEP' : 'TOEIC', skill: next.skill, part: next.part, questionType: next.type, options: makeOptions(next.options || []), prepSeconds: next.prep || '', responseSeconds: next.response || '', sectionSeconds: next.section || '', minWords: next.minWords || '', groupKey: next.group ? '' : '' }));
   };
   const setOption = (idx: number, patch: any) => setForm((f: any) => ({ ...f, options: f.options.map((x: any, i: number) => i === idx ? { ...x, ...patch } : (patch.isCorrect ? { ...x, isCorrect: false } : x)) }));
   const setPassage = (idx: number, value: string) => setForm((f: any) => ({ ...f, group: { ...f.group, passages: (f.group.passages || ['']).map((x: string, i: number) => i === idx ? value : x) } }));
@@ -118,15 +160,17 @@ function QuestionForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
   const submit = async () => {
     if (isObjective && !form.options.some((o: any) => o.isCorrect)) return toast.error('Vui lòng chọn 1 đáp án đúng');
     if (rule.image && !form.imageUrl) return toast.error('Part này bắt buộc có hình ảnh');
-    if (rule.audio && !form.audioUrl) return toast.error('Part này bắt buộc có audio');
+    if (rule.audio && !rule.group && !form.audioUrl) return toast.error('Part này bắt buộc có audio');
     if (!form.questionText.trim() && !rule.hideText && !rule.image) return toast.error('Vui lòng nhập nội dung câu hỏi');
     setLoading(true);
+    const generatedGroupKey = rule.group ? (form.groupKey || buildAutoGroupKey(form, rule)) : '';
     const payload = {
       ...form,
+      groupKey: generatedGroupKey,
       displayConfig: { showQuestionText: !rule.hideText, showOptionText: !rule.hideText, splitScreen: !!rule.splitScreen, transitionSeconds: rule.transition || 0, groupPreviewSeconds: rule.groupPreview || 0, wordCount: form.skill === 'Writing', countdown: ['Speaking','Writing'].includes(form.skill), recording: form.skill === 'Speaking' },
       media: { imageUrl: form.imageUrl, audioUrl: form.audioUrl },
       metadata: { ...form.metadata, examRule: rule.label, note: rule.note || '', keywords: form.metadata?.keywords || '', followUpQuestions: form.metadata?.followUpQuestions || '', solutions: form.metadata?.solutions || '' },
-      group: rule.group ? { ...form.group, groupKey: form.groupKey, content: form.questionGroup, media: { imageUrl: form.imageUrl, audioUrl: form.audioUrl }, displayConfig: { splitScreen: !!rule.splitScreen, richText: !!rule.richText, qPerGroup: rule.qPerGroup || null } } : undefined,
+      group: rule.group ? { ...form.group, groupKey: generatedGroupKey, content: form.questionGroup, media: { imageUrl: form.imageUrl, audioUrl: form.audioUrl }, displayConfig: { splitScreen: !!rule.splitScreen, richText: !!rule.richText, qPerGroup: rule.qPerGroup || null, autoGeneratedGroupKey: true } } : undefined,
     };
     try {
       if (initial) await examQuestionsApi.update(initial.id, payload); else await examQuestionsApi.create(payload);
@@ -138,10 +182,10 @@ function QuestionForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
 
   return <Modal title={initial ? 'Sửa câu hỏi' : 'Thêm câu hỏi'} size="lg" onClose={onClose} footer={<><button className="btn btn-secondary" onClick={onClose}>Huỷ</button><button className="btn btn-primary" disabled={loading} onClick={submit}>{loading ? 'Đang lưu...' : 'Lưu'}</button></>}>
     <div className="grid-2">
-      <div className="form-group"><label className="form-label">Format đề</label><select className="form-select" value={form.formatCode} onChange={e => changeFormat(e.target.value)}>{FORMAT_OPTIONS.map(f => <option key={f.code} value={f.code}>{f.label}</option>)}</select></div>
-      <div className="form-group"><label className="form-label">Part / Question</label><select className="form-select" value={form.part} onChange={e => changeRule(e.target.value)}>{rules.map(r => <option key={r.part} value={r.part}>{r.label}</option>)}</select></div>
+      <div className="form-group"><label className="form-label">Loại đề thi</label><select className="form-select" value={form.formatCode} onChange={e => changeFormat(e.target.value)}>{FORMAT_OPTIONS.map(f => <option key={f.code} value={f.code}>{f.label}</option>)}</select></div>
+      <div className="form-group"><label className="form-label">Phần thi</label><select className="form-select" value={form.part} onChange={e => changeRule(e.target.value)}>{rules.map(r => <option key={r.part} value={r.part}>{r.label}</option>)}</select></div>
       <div className="form-group"><label className="form-label">Kỹ năng</label><input className="form-input" value={form.skill} readOnly /></div>
-      <div className="form-group"><label className="form-label">Số thứ tự câu</label><input type="number" className="form-input" value={form.sequenceNo} onChange={e => setForm((f: any) => ({ ...f, sequenceNo: e.target.value }))} /></div>
+      <div className="form-group"><label className="form-label">Số thứ tự câu trong Part</label><input type="number" className="form-input" value={form.sequenceNo} onChange={e => setForm((f: any) => ({ ...f, sequenceNo: e.target.value }))} /></div>
     </div>
 
     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 13 }}>
@@ -149,17 +193,19 @@ function QuestionForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
       {rule.transition ? ` · Chuyển tiếp ${rule.transition}s.` : ''}{rule.prep ? ` · Chuẩn bị ${rule.prep}s, trả lời ${rule.response}s.` : ''}{rule.section ? ` · Thời gian nhóm ${Math.round(rule.section/60)} phút.` : ''}{rule.note ? ` · ${rule.note}.` : ''}
     </div>
 
-    {rule.group && <div className="form-group"><label className="form-label">Mã nhóm audio/đoạn văn <span className="required">*</span></label><input className="form-input" value={form.groupKey} onChange={e => setForm((f: any) => ({ ...f, groupKey: e.target.value }))} placeholder="VD: P3-G001, P6-TEXT01" /></div>}
+    {rule.group && <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', borderRadius: 10, padding: 10, marginBottom: 12, fontSize: 13 }}>
+      Hệ thống tự gom các câu cùng Part/nhóm, bạn không cần nhập mã nhóm kỹ thuật. {form.formatCode === 'VSTEP_4_SKILLS' && form.skill === 'Listening' ? 'Với VSTEP Listening, mỗi Part chỉ có 1 audio chung; các câu trong cùng Part sẽ dùng chung audio đó.' : ''}
+    </div>}
 
-    {(rule.group || rule.richText || rule.email || rule.splitScreen) && <div className="form-group"><label className="form-label">Nội dung nhóm / đoạn văn / email / bảng thông tin</label><textarea className="form-textarea" style={{ minHeight: 120 }} value={form.questionGroup} onChange={e => setForm((f: any) => ({ ...f, questionGroup: e.target.value, group: { ...f.group, content: e.target.value } }))} placeholder="TOEIC Part 6/7 nhập đoạn văn. VSTEP Reading nhập bài đọc dài; VSTEP Speaking nhập chủ đề/tình huống/giải pháp/follow-up." /></div>}
+    {(rule.group || rule.richText || rule.email || rule.splitScreen) && <div className="form-group"><label className="form-label">{getGroupContentLabel(form, rule)}</label><textarea className="form-textarea" style={{ minHeight: 120 }} value={form.questionGroup} onChange={e => setForm((f: any) => ({ ...f, questionGroup: e.target.value, group: { ...f.group, content: e.target.value } }))} placeholder={getGroupContentPlaceholder(form)} /></div>}
 
-    {rule.splitScreen && <div className="form-group"><label className="form-label">Các đoạn văn/ngữ liệu hiển thị bên trái</label>{(form.group.passages || ['']).map((p: string, idx: number) => <textarea key={idx} className="form-textarea" style={{ marginBottom: 8 }} value={p} onChange={e => setPassage(idx, e.target.value)} placeholder={`Đoạn ${idx + 1}`} />)}<button className="btn btn-secondary btn-sm" onClick={addPassage} disabled={(form.group.passages || []).length >= (rule.passagesMax || 3)}>+ Thêm đoạn</button></div>}
+    {rule.splitScreen && form.formatCode !== 'VSTEP_4_SKILLS' && <div className="form-group"><label className="form-label">Các đoạn văn/ngữ liệu hiển thị bên trái</label>{(form.group.passages || ['']).map((p: string, idx: number) => <textarea key={idx} className="form-textarea" style={{ marginBottom: 8 }} value={p} onChange={e => setPassage(idx, e.target.value)} placeholder={`Đoạn ${idx + 1}`} />)}<button className="btn btn-secondary btn-sm" onClick={addPassage} disabled={(form.group.passages || []).length >= (rule.passagesMax || 3)}>+ Thêm đoạn</button></div>}
 
     <div className="form-group"><label className="form-label">Nội dung câu hỏi</label><textarea className="form-textarea" value={form.questionText} onChange={e => setForm((f: any) => ({ ...f, questionText: e.target.value }))} placeholder={rule.hideText ? 'Có thể nhập transcript/nội dung nội bộ, học viên sẽ không thấy' : 'Nhập câu hỏi hoặc đề bài'} /></div>
 
     <div className="grid-2">
       {(rule.image || rule.optionalImage) && <div className="form-group"><label className="form-label">Hình ảnh / bảng biểu {rule.image && <span className="required">*</span>}</label><div style={{ display: 'flex', gap: 8 }}><input className="form-input" value={form.imageUrl} onChange={e => setForm((f: any) => ({ ...f, imageUrl: e.target.value }))} placeholder="URL hình ảnh"/><FileUpload label="Upload ảnh" accept="image/*" onUploaded={url => setForm((f: any) => ({ ...f, imageUrl: url }))}/></div></div>}
-      {rule.audio && <div className="form-group"><label className="form-label">Audio {rule.audio && <span className="required">*</span>}</label><div style={{ display: 'flex', gap: 8 }}><input className="form-input" value={form.audioUrl} onChange={e => setForm((f: any) => ({ ...f, audioUrl: e.target.value }))} placeholder="URL audio"/><FileUpload label="Upload audio" accept="audio/*" onUploaded={url => setForm((f: any) => ({ ...f, audioUrl: url }))}/></div></div>}
+      {rule.audio && <div className="form-group"><label className="form-label">{form.formatCode === 'VSTEP_4_SKILLS' && form.skill === 'Listening' ? 'Audio chung của Part' : rule.group ? 'Audio chung của nhóm' : 'Audio của câu'} {!rule.group && rule.audio && <span className="required">*</span>}</label><div style={{ display: 'flex', gap: 8 }}><input className="form-input" value={form.audioUrl} onChange={e => setForm((f: any) => ({ ...f, audioUrl: e.target.value }))} placeholder="URL audio"/><FileUpload label="Upload audio" accept="audio/*" onUploaded={url => setForm((f: any) => ({ ...f, audioUrl: url }))}/></div>{form.formatCode === 'VSTEP_4_SKILLS' && form.skill === 'Listening' && <small style={{ color: '#64748b' }}>Chỉ cần upload audio chung một lần cho Part. Các câu còn lại trong cùng Part sẽ tự dùng audio này; nếu để trống, hệ thống giữ audio chung đã có trước đó.</small>}</div>}
     </div>
 
     {['Speaking','Writing'].includes(form.skill) && <div className="grid-2"><div className="form-group"><label className="form-label">Thời gian chuẩn bị giây</label><input type="number" className="form-input" value={form.prepSeconds} onChange={e => setForm((f: any) => ({ ...f, prepSeconds: e.target.value }))} /></div><div className="form-group"><label className="form-label">Thời gian ghi âm / làm bài giây</label><input type="number" className="form-input" value={form.responseSeconds || form.sectionSeconds} onChange={e => setForm((f: any) => ({ ...f, responseSeconds: e.target.value, sectionSeconds: rule.section ? e.target.value : f.sectionSeconds }))} /></div><div className="form-group"><label className="form-label">Tối thiểu số từ</label><input type="number" className="form-input" value={form.minWords} onChange={e => setForm((f: any) => ({ ...f, minWords: e.target.value }))} /></div><div className="form-group"><label className="form-label">Từ khóa bắt buộc</label><input className="form-input" value={form.metadata?.keywords || ''} onChange={e => setForm((f: any) => ({ ...f, metadata: { ...f.metadata, keywords: e.target.value } }))} placeholder="VD: offer, discount" /></div></div>}
@@ -193,7 +239,7 @@ export default function QuestionBankPage() {
     <div className="page-header flex items-center justify-between"><div><h1 className="page-title">Ngân hàng câu hỏi thi thử</h1><p className="page-subtitle">Form nhập liệu TOEIC và VSTEP; hỗ trợ audio/hình ảnh, nhóm câu, split-screen Reading, word count Writing, microphone và countdown Speaking.</p></div><button className="btn btn-primary" onClick={() => setShowAdd(true)}><Plus size={15}/> Thêm câu hỏi</button></div>
     <div className="stats-grid"><div className="stat-card"><div><div className="stat-value">{total}</div><div className="stat-label">TỔNG CÂU</div></div><BookOpen color="var(--primary)" /></div><div className="stat-card"><div><div className="stat-value">{stat.Listening || 0}</div><div className="stat-label">LISTENING</div></div><Headphones color="var(--primary)" /></div><div className="stat-card"><div><div className="stat-value">{stat.Speaking || 0}</div><div className="stat-label">SPEAKING</div></div><Mic color="var(--primary)" /></div><div className="stat-card"><div><div className="stat-value">{stat.Writing || 0}</div><div className="stat-label">WRITING</div></div><PenLine color="var(--primary)" /></div></div>
     <div className="filter-bar"><div className="search-input"><Search className="search-icon" size={14}/><input className="form-input" placeholder="Tìm câu hỏi, topic, group..." value={search} onChange={e => setSearch(e.target.value)} /></div><select className="form-select" style={{ width: 230 }} value={formatCode} onChange={e => setFormatCode(e.target.value)}>{FORMAT_OPTIONS.map(f => <option key={f.code} value={f.code}>{f.label}</option>)}</select><select className="form-select" style={{ width: 150 }} value={skill} onChange={e => setSkill(e.target.value)}><option value="">Tất cả kỹ năng</option><option>Listening</option><option>Reading</option><option>Speaking</option><option>Writing</option></select></div>
-    {loading ? <Loading /> : <div className="table-container"><table><thead><tr><th>Câu hỏi</th><th>Format</th><th>Kỹ năng</th><th>Part</th><th>Media/Timer</th><th>Trạng thái</th><th></th></tr></thead><tbody>{rows.length === 0 ? <tr><td colSpan={7}><EmptyState /></td></tr> : rows.map(q => <tr key={q.id}><td><b>{q.question_text || q.topic || q.group_key || 'Câu hỏi không hiển thị text'}</b><div style={{ color: 'var(--gray-500)', fontSize: 12 }}>{q.group_key ? `Group: ${q.group_key}` : q.topic}</div></td><td><Badge variant={q.format_code === 'TOEIC_4_SKILLS' ? 'purple' : 'blue'}>{q.format_code || 'TOEIC_LR'}</Badge></td><td>{q.skill}</td><td>{q.part}</td><td style={{ fontSize: 12 }}>{q.audio_url ? 'Audio ' : ''}{q.image_url ? 'Ảnh ' : ''}{q.prep_seconds ? `Prep ${q.prep_seconds}s ` : ''}{q.response_seconds ? `Record ${q.response_seconds}s` : ''}</td><td><StatusBadge status={q.status} /></td><td><div style={{ display: 'flex', gap: 6 }}><button className="btn btn-secondary btn-sm" onClick={() => edit(q)}><Pencil size={12}/> Sửa</button>{canDelete && <button className="btn btn-danger btn-sm" onClick={() => setDeleting(q)}><Trash2 size={12}/> Xoá</button>}</div></td></tr>)}</tbody></table></div>}
+    {loading ? <Loading /> : <div className="table-container"><table><thead><tr><th>Câu hỏi</th><th>Format</th><th>Kỹ năng</th><th>Part</th><th>Media/Timer</th><th>Trạng thái</th><th></th></tr></thead><tbody>{rows.length === 0 ? <tr><td colSpan={7}><EmptyState /></td></tr> : rows.map(q => <tr key={q.id}><td><b>{q.question_text || q.topic || q.group_key || 'Câu hỏi không hiển thị text'}</b><div style={{ color: 'var(--gray-500)', fontSize: 12 }}>{q.topic || (q.group_key ? 'Có nội dung/audio chung' : '')}</div></td><td><Badge variant={q.format_code === 'TOEIC_4_SKILLS' ? 'purple' : 'blue'}>{q.format_code || 'TOEIC_LR'}</Badge></td><td>{q.skill}</td><td>{q.part}</td><td style={{ fontSize: 12 }}>{q.audio_url ? 'Audio ' : ''}{q.image_url ? 'Ảnh ' : ''}{q.prep_seconds ? `Prep ${q.prep_seconds}s ` : ''}{q.response_seconds ? `Record ${q.response_seconds}s` : ''}</td><td><StatusBadge status={q.status} /></td><td><div style={{ display: 'flex', gap: 6 }}><button className="btn btn-secondary btn-sm" onClick={() => edit(q)}><Pencil size={12}/> Sửa</button>{canDelete && <button className="btn btn-danger btn-sm" onClick={() => setDeleting(q)}><Trash2 size={12}/> Xoá</button>}</div></td></tr>)}</tbody></table></div>}
     {showAdd && <QuestionForm onClose={() => setShowAdd(false)} onSuccess={load} />}{editing && <QuestionForm initial={editing} onClose={() => setEditing(null)} onSuccess={load} />}{deleting && <ConfirmDialog message="Xoá câu hỏi này?" onCancel={() => setDeleting(null)} onConfirm={del} />}
   </div>;
 }

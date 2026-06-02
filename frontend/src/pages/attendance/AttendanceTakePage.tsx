@@ -266,7 +266,6 @@ export default function AttendanceTakePage() {
               <thead>
                 <tr>
                   <th style={{ width: 48 }}>STT</th>
-                  <th style={{ width: 90 }}>Mã HV</th>
                   <th>Họ tên</th>
                   <th style={{ width: 110 }}>Ngày sinh</th>
                   <th>Trạng thái</th>
@@ -281,7 +280,6 @@ export default function AttendanceTakePage() {
                   return (
                     <tr key={sid}>
                       <td style={{ fontWeight: 600, color: '#9ca3af', textAlign: 'center' }}>{idx + 1}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: 12, color: '#6b7280' }}>{s.student_code || 'N/A'}</td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{s.full_name}</div>
                       </td>

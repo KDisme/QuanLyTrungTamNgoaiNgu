@@ -1,9 +1,9 @@
 import React from 'react';
 import {
-  LayoutDashboard, Users, GraduationCap, UserCheck, Building2,
-  BookOpen, Calendar, ClipboardList, DollarSign, Receipt, FileText,
+  LayoutDashboard, Users, GraduationCap, UserCheck,
+  BookOpen, Calendar, ClipboardList, FileText,
   Settings, Briefcase, HelpCircle, ClipboardCheck, UserCircle,
-  Bell, LibraryBig, BadgeCheck, WalletCards
+  Bell
 } from 'lucide-react';
 
 export type RoleType = 'admin' | 'staff' | 'teacher' | 'student';
@@ -22,7 +22,7 @@ export type NavGroup = {
 export const ROLE_PRIORITY: RoleType[] = ['admin', 'staff', 'teacher', 'student'];
 
 export const ROLE_LABELS: Record<RoleType, string> = {
-  admin: 'Admin trung tâm',
+  admin: 'Admin',
   staff: 'Nhân viên',
   teacher: 'Giáo viên',
   student: 'Học viên',
@@ -74,15 +74,6 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'admin/mock-exams', label: 'Kỳ thi thử', icon: ClipboardCheck },
       ],
     },
-    {
-      section: 'TÀI CHÍNH',
-      items: [
-        { to: 'admin/tuition', label: 'Thu học phí', icon: DollarSign },
-        { to: 'admin/expenses', label: 'Chi phí', icon: Receipt },
-        { to: 'admin/fee-templates', label: 'Mẫu học phí', icon: FileText },
-      ],
-    },
-    { section: 'HỆ THỐNG', items: [{ to: 'admin/settings', label: 'Cài đặt', icon: Settings }] },
   ],
   staff: [
     { section: 'TỔNG QUAN', items: [{ to: 'staff/dashboard', label: 'Việc hôm nay', icon: LayoutDashboard }] },
@@ -93,13 +84,6 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'staff/classes', label: 'Ghi danh / lớp học', icon: BookOpen },
         { to: 'staff/schedules', label: 'Lịch học', icon: Calendar },
         { to: 'staff/attendance', label: 'Theo dõi điểm danh', icon: ClipboardList },
-      ],
-    },
-    {
-      section: 'THU NGÂN',
-      items: [
-        { to: 'staff/tuition', label: 'Thu học phí', icon: WalletCards },
-        { to: 'staff/fee-templates', label: 'Mẫu học phí', icon: FileText },
       ],
     },
     {
@@ -119,7 +103,6 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'teacher/my-classes', label: 'Lớp của tôi', icon: BookOpen },
         { to: 'teacher/my-schedule', label: 'Lịch dạy', icon: Calendar },
         { to: 'teacher/attendance', label: 'Điểm danh', icon: ClipboardList },
-        { to: 'teacher/my-students', label: 'Học viên lớp tôi', icon: UserCheck },
       ],
     },
     {
@@ -127,7 +110,6 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
       items: [
         { to: 'teacher/exam-questions', label: 'Ngân hàng câu hỏi', icon: HelpCircle },
         { to: 'teacher/grading', label: 'Thi thử / chấm bài', icon: ClipboardCheck },
-        { to: 'teacher/results', label: 'Kết quả học viên', icon: BadgeCheck },
       ],
     },
     { section: 'CÁ NHÂN', items: [{ to: 'teacher/profile', label: 'Hồ sơ cá nhân', icon: UserCircle }] },
@@ -140,15 +122,12 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'student/my-classes', label: 'Lớp học của tôi', icon: BookOpen },
         { to: 'student/my-schedule', label: 'Lịch học', icon: Calendar },
         { to: 'student/my-attendance', label: 'Điểm danh của tôi', icon: ClipboardList },
-        { to: 'student/materials', label: 'Tài liệu', icon: LibraryBig },
       ],
     },
     {
-      section: 'THI & HỌC PHÍ',
+      section: 'THI THỬ',
       items: [
-        { to: 'student/my-fees', label: 'Học phí của tôi', icon: DollarSign },
         { to: 'student/mock-exams', label: 'Thi thử', icon: ClipboardCheck },
-        { to: 'student/my-results', label: 'Kết quả', icon: BadgeCheck },
       ],
     },
     {

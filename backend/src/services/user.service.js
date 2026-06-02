@@ -177,13 +177,146 @@ class UserService {
   }
 
   async update(tenantId, userId, data) {
-    const { fullName, email, phone, gender, dateOfBirth, address, isActive } = data;
-    await pool.query(
-      `UPDATE users SET full_name=$1, email=$2, phone=$3, gender=$4, date_of_birth=$5, address=$6, is_active=$7, updated_at=NOW()
-       WHERE id=$8 AND tenant_id=$9`,
-      [fullName, email, phone, gender, dateOfBirth || null, address, isActive !== undefined ? isActive : true, userId, tenantId]
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const currentResult = await client.query(
+        'SELECT * FROM users WHERE id=$1 AND tenant_id=$2',
+        [userId, tenantId]
+      );
+      if (!currentResult.rows.length) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const current = currentResult.rows[0];
+
+      const fullName = data.fullName ?? data.full_name ?? current.full_name;
+      const email = data.email !== undefined ? (data.email || null) : current.email;
+      const phone = data.phone !== undefined ? (data.phone || null) : current.phone;
+      const gender = data.gender !== undefined ? (data.gender || null) : current.gender;
+      const dateOfBirth = data.dateOfBirth ?? data.date_of_birth ?? current.date_of_birth;
+      const address = data.address !== undefined ? (data.address || null) : current.address;
+      const isActive = data.isActive ?? data.is_active ?? current.is_active;
+
+      await client.query(
+        `UPDATE users SET full_name=$1, email=$2, phone=$3, gender=$4, date_of_birth=$5, address=$6, is_active=$7, updated_at=NOW()
+         WHERE id=$8 AND tenant_id=$9`,
+        [fullName, email, phone, gender, dateOfBirth || null, address, isActive, userId, tenantId]
+      );
+
+      if (Array.isArray(data.roles)) {
+        const roles = [...new Set(data.roles)].filter((role) => ['admin', 'teacher', 'student', 'staff'].includes(role));
+        await client.query('DELETE FROM roles WHERE tenant_id=$1 AND user_id=$2', [tenantId, userId]);
+        for (const role of roles) {
+          await client.query(
+            'INSERT INTO roles (tenant_id, user_id, role_type) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+            [tenantId, userId, role]
+          );
+        }
+
+        if (roles.includes('teacher')) {
+          const teacherInfo = data.teacherInfo || data.teacherProfile || {};
+          const existed = await client.query('SELECT * FROM teacher_profiles WHERE tenant_id=$1 AND user_id=$2 LIMIT 1', [tenantId, userId]);
+          if (existed.rows.length) {
+            await client.query(
+              `UPDATE teacher_profiles SET specialization=$1, qualifications=$2, start_date=$3, bank_account=$4, notes=$5, updated_at=NOW()
+               WHERE tenant_id=$6 AND user_id=$7`,
+              [
+                teacherInfo.specialization ?? existed.rows[0].specialization,
+                teacherInfo.qualifications ?? existed.rows[0].qualifications,
+                teacherInfo.startDate ?? teacherInfo.start_date ?? existed.rows[0].start_date,
+                teacherInfo.bankAccount ?? teacherInfo.bank_account ?? existed.rows[0].bank_account,
+                teacherInfo.notes ?? existed.rows[0].notes,
+                tenantId,
+                userId,
+              ]
+            );
+          } else {
+            const code = teacherInfo.teacherCode || await this._genCode(client, tenantId, 'GV', 'teacher_profiles', 'teacher_code');
+            await client.query(
+              `INSERT INTO teacher_profiles (tenant_id, user_id, teacher_code, specialization, qualifications, start_date, bank_account, notes)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [tenantId, userId, code, teacherInfo.specialization || null, teacherInfo.qualifications || null, teacherInfo.startDate || null, teacherInfo.bankAccount || null, teacherInfo.notes || null]
+            );
+          }
+        } else {
+          await client.query('DELETE FROM teacher_profiles WHERE tenant_id=$1 AND user_id=$2', [tenantId, userId]);
+        }
+
+        if (roles.includes('student')) {
+          const studentInfo = data.studentInfo || data.studentProfile || {};
+          const existed = await client.query('SELECT * FROM student_profiles WHERE tenant_id=$1 AND user_id=$2 LIMIT 1', [tenantId, userId]);
+          if (existed.rows.length) {
+            await client.query(
+              `UPDATE student_profiles SET enrollment_date=$1, study_status=$2, notes=$3, updated_at=NOW()
+               WHERE tenant_id=$4 AND user_id=$5`,
+              [
+                studentInfo.enrollmentDate ?? studentInfo.enrollment_date ?? existed.rows[0].enrollment_date,
+                studentInfo.studyStatus ?? studentInfo.study_status ?? existed.rows[0].study_status,
+                studentInfo.notes ?? existed.rows[0].notes,
+                tenantId,
+                userId,
+              ]
+            );
+          } else {
+            const code = studentInfo.studentCode || await this._genCode(client, tenantId, 'HV', 'student_profiles', 'student_code');
+            await client.query(
+              `INSERT INTO student_profiles (tenant_id, user_id, student_code, enrollment_date, study_status, notes)
+               VALUES ($1,$2,$3,$4,$5,$6)`,
+              [tenantId, userId, code, studentInfo.enrollmentDate || null, studentInfo.studyStatus || 'active', studentInfo.notes || null]
+            );
+          }
+        } else {
+          await client.query('DELETE FROM student_profiles WHERE tenant_id=$1 AND user_id=$2', [tenantId, userId]);
+        }
+
+        if (roles.includes('staff')) {
+          const staffInfo = data.staffInfo || data.staffProfile || {};
+          const existed = await client.query('SELECT * FROM staff_profiles WHERE tenant_id=$1 AND user_id=$2 LIMIT 1', [tenantId, userId]);
+          if (existed.rows.length) {
+            await client.query(
+              `UPDATE staff_profiles SET position=$1, branch_id=$2, start_date=$3, bank_account=$4, notes=$5, updated_at=NOW()
+               WHERE tenant_id=$6 AND user_id=$7`,
+              [
+                staffInfo.position ?? existed.rows[0].position,
+                staffInfo.branchId ?? staffInfo.branch_id ?? existed.rows[0].branch_id,
+                staffInfo.startDate ?? staffInfo.start_date ?? existed.rows[0].start_date,
+                staffInfo.bankAccount ?? staffInfo.bank_account ?? existed.rows[0].bank_account,
+                staffInfo.notes ?? existed.rows[0].notes,
+                tenantId,
+                userId,
+              ]
+            );
+          } else {
+            const code = staffInfo.staffCode || await this._genCode(client, tenantId, 'NV', 'staff_profiles', 'staff_code');
+            await client.query(
+              `INSERT INTO staff_profiles (tenant_id, user_id, staff_code, position, branch_id, start_date, bank_account, notes)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [tenantId, userId, code, staffInfo.position || null, staffInfo.branchId || null, staffInfo.startDate || null, staffInfo.bankAccount || null, staffInfo.notes || null]
+            );
+          }
+        } else {
+          await client.query('DELETE FROM staff_profiles WHERE tenant_id=$1 AND user_id=$2', [tenantId, userId]);
+        }
+      }
+
+      await client.query('COMMIT');
+      return this.getById(tenantId, userId);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async delete(tenantId, userId) {
+    const result = await pool.query(
+      'DELETE FROM users WHERE id=$1 AND tenant_id=$2 RETURNING id',
+      [userId, tenantId]
     );
-    return this.getById(tenantId, userId);
+    return result.rowCount > 0;
   }
 
   async _genCode(client, tenantId, prefix, table, column) {

@@ -16,6 +16,46 @@ function roundToHalf(value) {
   const n = Number(value || 0);
   return Math.round(n * 2) / 2;
 }
+
+function slug(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+function pad2(value) {
+  return String(Math.max(1, Number(value) || 1)).padStart(2, '0');
+}
+function buildAutoGroupKey(data, rule = {}) {
+  const base = `${slug(data.formatCode || data.format_code)}_${slug(data.skill)}_${slug(data.part)}`;
+  const seq = toInt(data.sequenceNo ?? data.sequence_no, 1);
+  const perGroup = rule.questionsPerGroup || rule.qPerGroup || 0;
+  const groupNo = perGroup > 0 ? Math.ceil(seq / perGroup) : 1;
+
+  // VSTEP gom dữ liệu chung theo từng Part: Listening 1 audio/Part, Reading 1 bài đọc/Part, Speaking 1 đề/Part.
+  if ((data.formatCode || data.format_code) === 'VSTEP_4_SKILLS') return base;
+
+  // TOEIC Part 3/4/6/7 cần nhiều nhóm; hệ thống tự tính nhóm theo số thứ tự câu.
+  if (perGroup > 0) return `${base}_GROUP_${pad2(groupNo)}`;
+  return base;
+}
+function ruleUsesGroup(rule = {}, data = {}) {
+  return !!(data.groupKey || data.group_key || data.group || rule.audioScope === 'part' || rule.readingScope === 'part' || rule.richTextGroup || rule.splitScreen || rule.questionsPerGroup || rule.qPerGroup || rule.inputMode === 'situation_solutions' || rule.inputMode === 'mindmap_followup' || rule.responseMode === 'continuous_recording');
+}
+function isGroupLevelAudio(rule = {}) {
+  return rule.audioScope === 'part' || rule.partAudio || rule.questionsPerGroup || rule.qPerGroup || rule.inputMode === 'group_audio';
+}
+function getGroupTextFromPayload(group = {}, fallback = null) {
+  if (group.content) return group.content;
+  if (Array.isArray(group.passages) && group.passages.length) {
+    const first = group.passages[0];
+    if (typeof first === 'string') return first;
+    if (first?.content) return first.content;
+    if (first?.text) return first.text;
+  }
+  return fallback || null;
+}
 function camelQuestion(row) {
   return row ? {
     ...row,
@@ -56,20 +96,28 @@ class ExamService {
   }
 
   async upsertQuestionGroup(client, tenantId, userId, data) {
-    if (!data.groupKey && !data.group) return null;
     const group = data.group || {};
     const fmt = getFormat(data.formatCode || group.formatCode || 'TOEIC_LR');
-    const groupKey = data.groupKey || group.groupKey || `${fmt.code}-${data.part}-${Date.now()}`;
+    const rule = getBlueprintRule(fmt.code, data.skill || group.skill, data.part || group.part) || {};
+    if (!ruleUsesGroup(rule, data)) return null;
+    const groupKey = data.groupKey || data.group_key || group.groupKey || group.group_key || buildAutoGroupKey({ ...data, formatCode: fmt.code }, rule);
+    const content = getGroupTextFromPayload(group, data.questionGroup);
     const result = await client.query(
       `INSERT INTO exam_question_groups
        (tenant_id,format_code,exam_type,skill,part,title,group_key,content,passages,media,display_config,metadata,order_number,created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14)
        ON CONFLICT (tenant_id, group_key)
-       DO UPDATE SET title=EXCLUDED.title, content=EXCLUDED.content, passages=EXCLUDED.passages, media=EXCLUDED.media,
-         display_config=EXCLUDED.display_config, metadata=EXCLUDED.metadata, updated_at=NOW()
+       DO UPDATE SET
+         title=COALESCE(NULLIF(EXCLUDED.title,''), exam_question_groups.title),
+         content=COALESCE(NULLIF(EXCLUDED.content,''), exam_question_groups.content),
+         passages=CASE WHEN EXCLUDED.passages <> '[]'::jsonb THEN EXCLUDED.passages ELSE exam_question_groups.passages END,
+         media=CASE WHEN EXCLUDED.media <> '{}'::jsonb THEN exam_question_groups.media || EXCLUDED.media ELSE exam_question_groups.media END,
+         display_config=CASE WHEN EXCLUDED.display_config <> '{}'::jsonb THEN exam_question_groups.display_config || EXCLUDED.display_config ELSE exam_question_groups.display_config END,
+         metadata=CASE WHEN EXCLUDED.metadata <> '{}'::jsonb THEN exam_question_groups.metadata || EXCLUDED.metadata ELSE exam_question_groups.metadata END,
+         updated_at=NOW()
        RETURNING *`,
       [tenantId, fmt.code, data.examType || fmt.examType, data.skill || group.skill,
-        data.part || group.part, group.title || data.topic || null, groupKey, group.content || data.questionGroup || null,
+        data.part || group.part, group.title || data.topic || null, groupKey, content,
         JSON.stringify(group.passages || []), JSON.stringify(group.media || {}), JSON.stringify(group.displayConfig || {}),
         JSON.stringify(group.metadata || {}), group.orderNumber || null, userId]
     );
@@ -125,7 +173,8 @@ class ExamService {
   _validateQuestion(data) {
     const rule = getBlueprintRule(data.formatCode, data.skill, data.part);
     if (!data.skill || !data.part) throw Object.assign(new Error('Thiếu kỹ năng hoặc Part/Question'), { status: 400 });
-    if (rule?.requiresAudio && !data.audioUrl && !data.media?.audioUrl) throw Object.assign(new Error(`${data.part} bắt buộc có audio`), { status: 400 });
+    const groupMedia = data.group?.media || {};
+    if (rule?.requiresAudio && !isGroupLevelAudio(rule) && !data.audioUrl && !data.media?.audioUrl && !groupMedia.audioUrl && !groupMedia.audio) throw Object.assign(new Error(`${data.part} bắt buộc có audio`), { status: 400 });
     if (rule?.requiresImage && !data.imageUrl && !data.media?.imageUrl) throw Object.assign(new Error(`${data.part} bắt buộc có hình ảnh`), { status: 400 });
     const correctCount = (data.options || []).filter(o => !!o.isCorrect).length;
     if (['single_choice', 'audio_choice', 'group_choice'].includes(data.questionType) && correctCount !== 1) {
@@ -180,10 +229,8 @@ class ExamService {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      if (data.group || data.groupKey) {
-        const group = await this.upsertQuestionGroup(client, tenantId, userId, data);
-        data.groupKey = group?.group_key || data.groupKey;
-      }
+      const group = await this.upsertQuestionGroup(client, tenantId, userId, data);
+      if (group?.group_key) data.groupKey = group.group_key;
       const result = await client.query(
         `INSERT INTO exam_questions
         (tenant_id, exam_type, format_code, skill, part, question_type, group_key, sequence_no, question_group, question_text,
@@ -210,10 +257,8 @@ class ExamService {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      if (data.group || data.groupKey) {
-        const group = await this.upsertQuestionGroup(client, tenantId, raw.updatedBy, data);
-        data.groupKey = group?.group_key || data.groupKey;
-      }
+      const group = await this.upsertQuestionGroup(client, tenantId, raw.updatedBy, data);
+      if (group?.group_key) data.groupKey = group.group_key;
       const result = await client.query(
         `UPDATE exam_questions SET exam_type=$1, format_code=$2, skill=$3, part=$4, question_type=$5, group_key=$6, sequence_no=$7,
          question_group=$8, question_text=$9, image_url=$10, audio_url=$11, media=$12::jsonb, display_config=$13::jsonb, metadata=$14::jsonb,
@@ -333,12 +378,19 @@ class ExamService {
       );
       const examSet = result.rows[0];
       const orderedIds = [];
+      const shortages = [];
       for (const rule of fmt.blueprint) {
         const qs = await client.query(
           `SELECT id FROM exam_questions WHERE tenant_id=$1 AND format_code=$2 AND skill=$3 AND part=$4 AND status='active' ORDER BY COALESCE(sequence_no, id) LIMIT $5`,
           [tenantId, fmt.code, rule.skill, rule.part, rule.count]
         );
+        if (qs.rows.length < Number(rule.count || 0)) {
+          shortages.push(`${rule.skill} - ${rule.part}: cần ${rule.count}, hiện có ${qs.rows.length}`);
+        }
         orderedIds.push(...qs.rows.map(r => r.id));
+      }
+      if (shortages.length && data.allowPartial !== true) {
+        throw Object.assign(new Error(`Ngân hàng câu hỏi chưa đủ để tạo bộ đề. ${shortages.join('; ')}`), { status: 400, shortages });
       }
       if (orderedIds.length) await this._replaceExamSetQuestions(client, tenantId, examSet.id, orderedIds);
       await client.query('COMMIT');
@@ -477,7 +529,7 @@ class ExamService {
 
     const includeCorrect = isAdminStaff || roles.includes('teacher') || (isStudentOnly && m.rows[0].show_result === true && students[0]?.status === 'graded');
     const questions = await pool.query(
-      `SELECT esq.order_number, esq.section, esq.part AS set_part, q.*, g.content AS group_content,
+      `SELECT esq.order_number, esq.section, esq.part AS set_part, q.*, g.content AS group_content, g.media AS group_media, g.display_config AS group_display_config,
         COALESCE(json_agg(json_build_object('id', o.id, 'optionLabel', o.option_label, 'optionText', o.option_text, 'isCorrect', o.is_correct) ORDER BY o.option_label) FILTER (WHERE o.id IS NOT NULL), '[]') AS options
        FROM exam_set_questions esq
        JOIN exam_questions q ON q.id=esq.question_id
@@ -534,79 +586,199 @@ class ExamService {
     for (const studentId of ids) await client.query(`INSERT INTO mock_exam_students (tenant_id,mock_exam_id,student_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [tenantId, mockExamId, studentId]);
   }
 
+  async _getMockExamStudentForAttempt(client, tenantId, mockExamStudentId) {
+    const ms = await client.query(
+      `SELECT ms.*, m.status AS exam_status, m.start_time, m.end_time, m.attempt_limit, m.exam_set_id, e.format_code
+       FROM mock_exam_students ms
+       JOIN mock_exams m ON m.id=ms.mock_exam_id
+       JOIN exam_sets e ON e.id=m.exam_set_id
+       WHERE ms.id=$1 AND ms.tenant_id=$2`,
+      [mockExamStudentId, tenantId]
+    );
+    if (!ms.rows.length) return null;
+    const row = ms.rows[0];
+    const now = new Date();
+    if (row.exam_status !== 'active') throw Object.assign(new Error('Kỳ thi chưa mở hoặc đã đóng'), { status: 400 });
+    if (row.start_time && now < new Date(row.start_time)) throw Object.assign(new Error('Chưa đến thời gian làm bài'), { status: 400 });
+    if (row.end_time && now > new Date(row.end_time)) throw Object.assign(new Error('Đã hết thời gian làm bài'), { status: 400 });
+    if (row.status === 'graded') throw Object.assign(new Error('Bài thi đã được chấm, không thể làm lại'), { status: 400 });
+    return row;
+  }
+
+  async _ensureInProgressAttempt(client, tenantId, mockExamStudentId) {
+    const row = await this._getMockExamStudentForAttempt(client, tenantId, mockExamStudentId);
+    if (!row) return null;
+    const existing = await client.query(
+      `SELECT * FROM student_exam_attempts
+       WHERE tenant_id=$1 AND mock_exam_student_id=$2 AND status='in_progress'
+       ORDER BY attempt_no DESC, id DESC LIMIT 1`,
+      [tenantId, mockExamStudentId]
+    );
+    if (existing.rows.length) {
+      await client.query(`UPDATE mock_exam_students SET status='in_progress', started_at=COALESCE(started_at, $1), updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, [existing.rows[0].started_at || new Date(), mockExamStudentId, tenantId]);
+      return { row, attempt: existing.rows[0] };
+    }
+    const attemptLimit = Math.max(1, Number(row.attempt_limit || 1));
+    const attemptCount = await client.query('SELECT COUNT(*) FROM student_exam_attempts WHERE mock_exam_student_id=$1 AND tenant_id=$2', [mockExamStudentId, tenantId]);
+    const usedAttempts = Number(attemptCount.rows[0]?.count || 0);
+    if (usedAttempts >= attemptLimit) throw Object.assign(new Error(`Bạn đã dùng hết ${attemptLimit} lần làm bài`), { status: 400 });
+    const attemptNo = usedAttempts + 1;
+    const attempt = await client.query(
+      `INSERT INTO student_exam_attempts (tenant_id, mock_exam_student_id, attempt_no, status, started_at)
+       VALUES ($1,$2,$3,'in_progress',NOW()) RETURNING *`,
+      [tenantId, mockExamStudentId, attemptNo]
+    );
+    await client.query(`UPDATE mock_exam_students SET status='in_progress', started_at=COALESCE(started_at, NOW()), updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [mockExamStudentId, tenantId]);
+    return { row, attempt: attempt.rows[0] };
+  }
+
+  async startAttempt(tenantId, mockExamStudentId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ensured = await this._ensureInProgressAttempt(client, tenantId, mockExamStudentId);
+      await client.query('COMMIT');
+      return ensured ? { attempt: ensured.attempt, started_at: ensured.attempt.started_at } : null;
+    } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
+  }
+
+
+
+  async resetInProgressAttempt(tenantId, mockExamStudentId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const row = await client.query(
+        `SELECT id, status FROM mock_exam_students WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
+        [mockExamStudentId, tenantId]
+      );
+      if (!row.rows.length) { await client.query('ROLLBACK'); return null; }
+      if (row.rows[0].status !== 'in_progress') { await client.query('COMMIT'); return row.rows[0]; }
+      await client.query(
+        `DELETE FROM student_exam_attempts
+         WHERE tenant_id=$1 AND mock_exam_student_id=$2 AND status='in_progress'`,
+        [tenantId, mockExamStudentId]
+      );
+      const updated = await client.query(
+        `UPDATE mock_exam_students
+         SET status='assigned', started_at=NULL, updated_at=NOW()
+         WHERE id=$1 AND tenant_id=$2 AND status='in_progress'
+         RETURNING *`,
+        [mockExamStudentId, tenantId]
+      );
+      await client.query('COMMIT');
+      return updated.rows[0];
+    } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
+  }
+
+  async _saveAnswerOnAttempt(client, tenantId, mockExamStudentId, attemptId, ans) {
+    const questionId = Number(ans.questionId || ans.question_id);
+    if (!questionId) return null;
+    const q = await client.query(
+      `SELECT q.id, q.skill, q.score FROM exam_questions q
+       JOIN exam_set_questions esq ON esq.question_id=q.id
+       JOIN mock_exams m ON m.exam_set_id=esq.exam_set_id
+       JOIN mock_exam_students ms ON ms.mock_exam_id=m.id
+       WHERE q.id=$1 AND q.tenant_id=$2 AND ms.id=$3 LIMIT 1`,
+      [questionId, tenantId, mockExamStudentId]
+    );
+    if (!q.rows.length) return null;
+    let isCorrect = null; let score = 0;
+    const selectedOptionId = ans.selectedOptionId || ans.selected_option_id || null;
+    if (selectedOptionId) {
+      const opt = await client.query('SELECT is_correct FROM exam_question_options WHERE id=$1 AND question_id=$2', [selectedOptionId, questionId]);
+      isCorrect = !!opt.rows[0]?.is_correct;
+      score = isCorrect ? Number(q.rows[0].score || 1) : 0;
+    }
+    const result = await client.query(
+      `INSERT INTO student_exam_answers (tenant_id,attempt_id,mock_exam_student_id,question_id,selected_option_id,answer_text,is_correct,score,recording_url,duration_seconds,word_count,char_count,metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+       ON CONFLICT (attempt_id, question_id)
+       DO UPDATE SET selected_option_id=EXCLUDED.selected_option_id, answer_text=EXCLUDED.answer_text, is_correct=EXCLUDED.is_correct, score=EXCLUDED.score,
+         recording_url=COALESCE(EXCLUDED.recording_url, student_exam_answers.recording_url), duration_seconds=COALESCE(EXCLUDED.duration_seconds, student_exam_answers.duration_seconds),
+         word_count=EXCLUDED.word_count, char_count=EXCLUDED.char_count,
+         metadata=COALESCE(student_exam_answers.metadata, '{}'::jsonb) || EXCLUDED.metadata, updated_at=NOW()
+       RETURNING *`,
+      [tenantId, attemptId, mockExamStudentId, questionId, selectedOptionId, ans.answerText || ans.answer_text || null, isCorrect, score,
+        ans.recordingUrl || ans.recording_url || null, ans.durationSeconds || ans.duration_seconds || null, ans.wordCount || ans.word_count || null, ans.charCount || ans.char_count || null, JSON.stringify(ans.metadata || {})]
+    );
+    return result.rows[0];
+  }
+
+  async saveAnswer(tenantId, mockExamStudentId, answer) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ensured = await this._ensureInProgressAttempt(client, tenantId, mockExamStudentId);
+      if (!ensured) { await client.query('ROLLBACK'); return null; }
+      const saved = await this._saveAnswerOnAttempt(client, tenantId, mockExamStudentId, ensured.attempt.id, answer || {});
+      await client.query('COMMIT');
+      return saved;
+    } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
+  }
+
   async submitAnswers(tenantId, mockExamStudentId, answers) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const ms = await client.query(
-        `SELECT ms.*, m.status AS exam_status, m.start_time, m.end_time, m.attempt_limit, e.format_code
-         FROM mock_exam_students ms
-         JOIN mock_exams m ON m.id=ms.mock_exam_id
-         JOIN exam_sets e ON e.id=m.exam_set_id
-         WHERE ms.id=$1 AND ms.tenant_id=$2`,
-        [mockExamStudentId, tenantId]
-      );
-      if (!ms.rows.length) { await client.query('ROLLBACK'); return null; }
-      const row = ms.rows[0];
-      const now = new Date();
-      if (row.exam_status !== 'active') throw Object.assign(new Error('Kỳ thi chưa mở hoặc đã đóng'), { status: 400 });
-      if (row.start_time && now < new Date(row.start_time)) throw Object.assign(new Error('Chưa đến thời gian làm bài'), { status: 400 });
-      if (row.end_time && now > new Date(row.end_time)) throw Object.assign(new Error('Đã hết thời gian làm bài'), { status: 400 });
-      if (row.status === 'graded') throw Object.assign(new Error('Bài thi đã được chấm, không thể nộp lại'), { status: 400 });
+      const ensured = await this._ensureInProgressAttempt(client, tenantId, mockExamStudentId);
+      if (!ensured) { await client.query('ROLLBACK'); return null; }
+      const row = ensured.row;
+      const attemptId = ensured.attempt.id;
+      const attemptNo = ensured.attempt.attempt_no;
+      if (ensured.attempt.status !== 'in_progress') throw Object.assign(new Error('Lần làm bài này không còn ở trạng thái đang làm'), { status: 400 });
 
-      const attemptLimit = Math.max(1, Number(row.attempt_limit || 1));
-      const attemptCount = await client.query('SELECT COUNT(*) FROM student_exam_attempts WHERE mock_exam_student_id=$1 AND tenant_id=$2', [mockExamStudentId, tenantId]);
-      const usedAttempts = Number(attemptCount.rows[0]?.count || 0);
-      if (usedAttempts >= attemptLimit) throw Object.assign(new Error(`Bạn đã dùng hết ${attemptLimit} lần làm bài`), { status: 400 });
-      const attemptNo = usedAttempts + 1;
-      const attempt = await client.query(
-        `INSERT INTO student_exam_attempts (tenant_id, mock_exam_student_id, attempt_no, status, started_at)
-         VALUES ($1,$2,$3,'in_progress',COALESCE($4, NOW())) RETURNING *`,
-        [tenantId, mockExamStudentId, attemptNo, row.started_at]
-      );
-      const attemptId = attempt.rows[0].id;
-
-      let objectiveScore = 0;
       for (const ans of answers || []) {
-        const q = await client.query('SELECT id, skill, score FROM exam_questions WHERE id=$1 AND tenant_id=$2', [ans.questionId, tenantId]);
-        if (!q.rows.length) continue;
-        let isCorrect = null; let score = 0;
-        if (ans.selectedOptionId) {
-          const opt = await client.query('SELECT is_correct FROM exam_question_options WHERE id=$1 AND question_id=$2', [ans.selectedOptionId, ans.questionId]);
-          isCorrect = !!opt.rows[0]?.is_correct; score = isCorrect ? Number(q.rows[0].score || 1) : 0; objectiveScore += score;
-        }
-        await client.query(
-          `INSERT INTO student_exam_answers (tenant_id,attempt_id,mock_exam_student_id,question_id,selected_option_id,answer_text,is_correct,score,recording_url,duration_seconds,word_count,char_count,metadata)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
-           ON CONFLICT (attempt_id, question_id)
-           DO UPDATE SET selected_option_id=EXCLUDED.selected_option_id, answer_text=EXCLUDED.answer_text, is_correct=EXCLUDED.is_correct, score=EXCLUDED.score,
-             recording_url=EXCLUDED.recording_url, duration_seconds=EXCLUDED.duration_seconds, word_count=EXCLUDED.word_count, char_count=EXCLUDED.char_count, metadata=EXCLUDED.metadata`,
-          [tenantId, attemptId, mockExamStudentId, ans.questionId, ans.selectedOptionId || null, ans.answerText || null, isCorrect, score,
-            ans.recordingUrl || null, ans.durationSeconds || null, ans.wordCount || null, ans.charCount || null, JSON.stringify(ans.metadata || {})]
-        );
+        await this._saveAnswerOnAttempt(client, tenantId, mockExamStudentId, attemptId, ans);
       }
+
       const fmt = getFormat(row.format_code || 'TOEIC_LR');
-      let totalScore = objectiveScore;
+      let totalScore = 0;
+      let objectiveScore = 0;
       let skillBreakdown = {};
+
       if (fmt.examType === 'VSTEP') {
-        const skillRows = await client.query(`SELECT q.skill, COUNT(*) AS total, COUNT(*) FILTER (WHERE a.is_correct = TRUE) AS correct
-          FROM exam_questions q LEFT JOIN student_exam_answers a ON a.question_id=q.id AND a.attempt_id=$1
-          WHERE q.tenant_id=$2 AND q.format_code=$3 AND q.skill IN ('Listening','Reading')
-          GROUP BY q.skill`, [attemptId, tenantId, fmt.code]);
-        skillRows.rows.forEach(r => { skillBreakdown[r.skill] = { correct: Number(r.correct || 0), total: Number(r.total || 0), score10: r.total ? roundToHalf((Number(r.correct || 0) / Number(r.total)) * 10) : 0 }; });
+        const skillRows = await client.query(
+          `SELECT q.skill, COUNT(*) AS total, COUNT(*) FILTER (WHERE a.is_correct = TRUE) AS correct, COALESCE(SUM(a.score),0) AS raw_score
+           FROM exam_set_questions esq
+           JOIN mock_exams m ON m.exam_set_id=esq.exam_set_id
+           JOIN mock_exam_students ms ON ms.mock_exam_id=m.id
+           JOIN exam_questions q ON q.id=esq.question_id
+           LEFT JOIN student_exam_answers a ON a.question_id=q.id AND a.attempt_id=$1
+           WHERE ms.id=$2 AND esq.tenant_id=$3 AND q.skill IN ('Listening','Reading')
+           GROUP BY q.skill`,
+          [attemptId, mockExamStudentId, tenantId]
+        );
+        skillRows.rows.forEach(r => {
+          const total = Number(r.total || 0);
+          const correct = Number(r.correct || 0);
+          objectiveScore += Number(r.raw_score || 0);
+          skillBreakdown[r.skill] = { correct, total, score10: total ? roundToHalf((correct / total) * 10) : 0 };
+        });
         const scores = ['Listening','Reading'].map(k => skillBreakdown[k]?.score10).filter(v => typeof v === 'number');
         totalScore = scores.length ? roundToHalf(scores.reduce((a,b)=>a+b,0) / scores.length) : 0;
+      } else {
+        const obj = await client.query(`SELECT COALESCE(SUM(score),0) AS score FROM student_exam_answers WHERE tenant_id=$1 AND attempt_id=$2 AND is_correct IS NOT NULL`, [tenantId, attemptId]);
+        objectiveScore = Number(obj.rows[0]?.score || 0);
+        totalScore = objectiveScore;
       }
+
       const manualQuestionCount = await client.query(
-        `SELECT COUNT(*) FROM exam_set_questions esq
-         JOIN mock_exams m ON m.exam_set_id=esq.exam_set_id
-         JOIN exam_questions q ON q.id=esq.question_id
-         WHERE m.id=$1 AND esq.tenant_id=$2 AND (q.skill IN ('Writing','Speaking') OR q.question_type LIKE 'writing_%' OR q.question_type LIKE 'speaking_%')`,
+        `SELECT COUNT(*) FROM (
+           SELECT DISTINCT CASE
+             WHEN q.format_code='VSTEP_4_SKILLS' AND q.skill='Speaking' THEN q.skill || ':' || q.part
+             ELSE q.id::text
+           END AS manual_item
+           FROM exam_set_questions esq
+           JOIN mock_exams m ON m.exam_set_id=esq.exam_set_id
+           JOIN exam_questions q ON q.id=esq.question_id
+           WHERE m.id=$1 AND esq.tenant_id=$2 AND (q.skill IN ('Writing','Speaking') OR q.question_type LIKE 'writing_%' OR q.question_type LIKE 'speaking_%')
+         ) x`,
         [row.mock_exam_id, tenantId]
       );
       const finalStatus = Number(manualQuestionCount.rows[0]?.count || 0) > 0 ? 'submitted' : 'graded';
       await client.query(`UPDATE student_exam_attempts SET status=$1, submitted_at=NOW(), objective_score=$2, total_score=$3, skill_score_breakdown=$4::jsonb WHERE id=$5 AND tenant_id=$6`, [finalStatus, objectiveScore, totalScore, JSON.stringify(skillBreakdown), attemptId, tenantId]);
-      const updated = await client.query(`UPDATE mock_exam_students SET status=$1, started_at=COALESCE(started_at, NOW()), submitted_at=NOW(), objective_score=$2, total_score=$3, skill_score_breakdown=$4::jsonb WHERE id=$5 AND tenant_id=$6 RETURNING *`, [finalStatus, objectiveScore, totalScore, JSON.stringify(skillBreakdown), mockExamStudentId, tenantId]);
+      const updated = await client.query(`UPDATE mock_exam_students SET status=$1, started_at=COALESCE(started_at, $2), submitted_at=NOW(), objective_score=$3, total_score=$4, skill_score_breakdown=$5::jsonb, updated_at=NOW() WHERE id=$6 AND tenant_id=$7 RETURNING *`, [finalStatus, ensured.attempt.started_at, objectiveScore, totalScore, JSON.stringify(skillBreakdown), mockExamStudentId, tenantId]);
       await client.query('COMMIT'); return { ...updated.rows[0], attempt_id: attemptId, attempt_no: attemptNo };
     } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
   }
