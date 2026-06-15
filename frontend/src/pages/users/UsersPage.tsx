@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Admin', teacher: 'GV', student: 'HV', staff: 'NV' };
 const ROLE_COLORS: Record<string, string> = { admin: 'blue', teacher: 'blue', student: 'green', staff: 'orange' };
-const SHOW_BRANCH_UI = false;
+const SHOW_BRANCH_UI = true;
 
 const toDateInput = (value?: string | null) => value ? String(value).slice(0, 10) : '';
 

@@ -58,12 +58,12 @@ tenantRouter.delete('/users/:id', authenticate, requireRole('admin'), userCtrl.d
 tenantRouter.get('/branches', authenticate, requireRole('admin', 'staff', 'teacher'), branchCtrl.getAll);
 tenantRouter.get('/branches/:id', authenticate, requireRole('admin', 'staff', 'teacher'), branchCtrl.getById);
 // Single-center mode: branch/room management is hidden temporarily.
-// tenantRouter.post('/branches', authenticate, requireRole('admin'), branchCtrl.create);
-// tenantRouter.put('/branches/:id', authenticate, requireRole('admin'), branchCtrl.update);
-// tenantRouter.delete('/branches/:id', authenticate, requireRole('admin'), branchCtrl.delete);
-// tenantRouter.post('/branches/:id/rooms', authenticate, requireRole('admin'), branchCtrl.addRoom);
-// tenantRouter.put('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.updateRoom);
-// tenantRouter.delete('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.deleteRoom);
+tenantRouter.post('/branches', authenticate, requireRole('admin'), branchCtrl.create);
+tenantRouter.put('/branches/:id', authenticate, requireRole('admin'), branchCtrl.update);
+tenantRouter.delete('/branches/:id', authenticate, requireRole('admin'), branchCtrl.delete);
+tenantRouter.post('/branches/:id/rooms', authenticate, requireRole('admin'), branchCtrl.addRoom);
+tenantRouter.put('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.updateRoom);
+tenantRouter.delete('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.deleteRoom);
 
 // Classes
 tenantRouter.get('/classes', authenticate, classCtrl.getAll);

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, UserCheck,
   BookOpen, Calendar, ClipboardList, FileText,
   Settings, Briefcase, HelpCircle, ClipboardCheck, UserCircle,
-  Bell
+  Bell, Building2, DollarSign, TrendingDown
 } from 'lucide-react';
 
 export type RoleType = 'admin' | 'staff' | 'teacher' | 'student';
@@ -61,6 +61,7 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
     {
       section: 'ĐÀO TẠO',
       items: [
+        { to: 'admin/branches', label: 'Cơ sở & Phòng học', icon: Building2 },
         { to: 'admin/classes', label: 'Lớp học', icon: BookOpen },
         { to: 'admin/schedules', label: 'Lịch học', icon: Calendar },
         { to: 'admin/attendance', label: 'Điểm danh', icon: ClipboardList },
@@ -72,6 +73,20 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'admin/exam-questions', label: 'Ngân hàng câu hỏi', icon: HelpCircle },
         { to: 'admin/exam-sets', label: 'Bộ đề thi', icon: FileText },
         { to: 'admin/mock-exams', label: 'Kỳ thi thử', icon: ClipboardCheck },
+      ],
+    },
+    {
+      section: 'TÀI CHÍNH',
+      items: [
+        { to: 'admin/tuition', label: 'Học phí', icon: DollarSign },
+        { to: 'admin/expenses', label: 'Chi phí chi tiêu', icon: TrendingDown },
+        { to: 'admin/fee-templates', label: 'Mẫu học phí', icon: FileText },
+      ],
+    },
+    {
+      section: 'HỆ THỐNG',
+      items: [
+        { to: 'admin/settings', label: 'Cài đặt hệ thống', icon: Settings },
       ],
     },
   ],
@@ -92,6 +107,13 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'staff/exam-questions', label: 'Ngân hàng câu hỏi', icon: HelpCircle },
         { to: 'staff/exam-sets', label: 'Bộ đề thi', icon: FileText },
         { to: 'staff/mock-exams', label: 'Kỳ thi thử', icon: ClipboardCheck },
+      ],
+    },
+    {
+      section: 'TÀI CHÍNH',
+      items: [
+        { to: 'staff/tuition', label: 'Học phí', icon: DollarSign },
+        { to: 'staff/fee-templates', label: 'Mẫu học phí', icon: FileText },
       ],
     },
   ],
@@ -122,6 +144,7 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'student/my-classes', label: 'Lớp học của tôi', icon: BookOpen },
         { to: 'student/my-schedule', label: 'Lịch học', icon: Calendar },
         { to: 'student/my-attendance', label: 'Điểm danh của tôi', icon: ClipboardList },
+        { to: 'student/my-fees', label: 'Học phí của tôi', icon: DollarSign },
       ],
     },
     {

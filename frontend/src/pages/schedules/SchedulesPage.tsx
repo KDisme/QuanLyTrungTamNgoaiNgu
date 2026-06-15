@@ -6,7 +6,7 @@ import { StatusBadge, Modal, Loading, EmptyState, ConfirmDialog } from '../../co
 import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 
-const SHOW_BRANCH_UI = false;
+const SHOW_BRANCH_UI = true;
 
 const WEEKDAYS = [
   { v: 1, l: 'Thứ 2' }, { v: 2, l: 'Thứ 3' }, { v: 3, l: 'Thứ 4' },

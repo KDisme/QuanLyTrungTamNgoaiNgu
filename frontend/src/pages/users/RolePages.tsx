@@ -7,7 +7,7 @@ import { Avatar, StatusBadge, Loading, EmptyState } from '../../components/commo
 import toast from 'react-hot-toast';
 import { EditUserModal } from './UsersPage';
 
-const SHOW_BRANCH_UI = false;
+const SHOW_BRANCH_UI = true;
 
 function UserActionButtons({ user, detailPath, onEdit, onDeleted }: { user: any; detailPath: string; onEdit: () => void; onDeleted: () => void }) {
   const { user: currentUser, hasRole } = useAuth();

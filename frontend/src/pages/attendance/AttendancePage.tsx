@@ -5,7 +5,7 @@ import { schedulesApi, classesApi, branchesApi } from '../../api';
 import { Loading } from '../../components/common';
 
 const PAGE_SIZE = 50;
-const SHOW_BRANCH_UI = false;
+const SHOW_BRANCH_UI = true;
 
 export default function AttendancePage() {
   const navigate = useNavigate();
