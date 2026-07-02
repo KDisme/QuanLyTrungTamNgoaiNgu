@@ -78,6 +78,7 @@ export default function HomeworkTakePage() {
   // Backend already strips correctAnswer / per-question score when reveal isn't allowed,
   // so the presence of a correctAnswer or a scored result is itself the signal to trust here.
   const canRevealAnswers = !!detail?.canRevealAnswers;
+  const canRevealScore = !!detail?.canRevealScore;
 
   const setAnswer = (questionId: number, patch: Partial<{ answerText: string; selectedAnswer: string }>) => {
     setAnswers((prev) => ({ ...prev, [questionId]: { ...(prev[questionId] || {}), ...patch } }));
@@ -186,20 +187,31 @@ export default function HomeworkTakePage() {
               </div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4 }}>ĐIỂM CỦA BẠN</div>
-                <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1 }}>{scoreSummary.totalScore} <span style={{ fontSize: 14, color: 'var(--gray-500)', fontWeight: 600 }}>/ {detail.totalScore ?? 100}</span></div>
+                {canRevealScore ? (
+                  <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1 }}>{scoreSummary.totalScore} <span style={{ fontSize: 14, color: 'var(--gray-500)', fontWeight: 600 }}>/ {detail.totalScore ?? 100}</span></div>
+                ) : (
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gray-500)' }}>Chưa công bố</div>
+                )}
               </div>
             </div>
             <StatusBadge status={scoreSummary.status || myStatus} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: canRevealScore ? 'var(--primary-light)' : 'var(--gray-50)', color: canRevealScore ? 'var(--primary-dark)' : 'var(--gray-600)', fontSize: 13, fontWeight: 600 }}>
+            {canRevealScore ? <Eye size={15} /> : <EyeOff size={15} />}
+            {canRevealScore
+              ? 'Giáo viên cho phép xem điểm — điểm và nhận xét hiển thị ngay khi có.'
+              : 'Giáo viên chưa công bố điểm cho bài này. Bạn sẽ được thông báo khi có điểm.'}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 12, background: canRevealAnswers ? 'var(--success-light)' : 'var(--gray-50)', color: canRevealAnswers ? '#059669' : 'var(--gray-600)', fontSize: 13, fontWeight: 600 }}>
             {canRevealAnswers ? <Eye size={15} /> : <EyeOff size={15} />}
             {canRevealAnswers
               ? 'Giáo viên cho phép xem đáp án — đáp án đúng được hiển thị bên dưới từng câu.'
-              : 'Giáo viên chưa mở đáp án cho bài này. Bạn sẽ thấy điểm và nhận xét, không thấy đáp án chi tiết.'}
+              : 'Giáo viên chưa mở đáp án cho bài này.'}
           </div>
 
-          {scoreSummary.feedback && (
+          {canRevealScore && scoreSummary.feedback && (
             <div style={{ display: 'flex', gap: 10, padding: 14, borderRadius: 12, background: 'var(--gray-50)', border: '1px solid var(--gray-200)' }}>
               <MessageSquare size={18} color="var(--gray-500)" style={{ flex: 'none', marginTop: 1 }} />
               <div>
@@ -234,7 +246,11 @@ export default function HomeworkTakePage() {
                 )}
                 {isLocked && question.questionType === 'essay' && (
                   <span className={`answer-result-pill ${result?.score !== undefined ? 'correct' : 'pending'}`}>
-                    {result?.score !== undefined ? `Đã chấm: ${result.score} điểm` : 'Chờ giáo viên chấm'}
+                    {result?.score !== undefined
+                      ? `Đã chấm: ${result.score} điểm`
+                      : String(myStatus || '').toLowerCase() === 'graded'
+                        ? 'Đã chấm — chờ công bố điểm'
+                        : 'Chờ giáo viên chấm'}
                   </span>
                 )}
               </div>

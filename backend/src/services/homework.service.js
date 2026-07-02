@@ -55,6 +55,7 @@ function camelAssignment(row) {
     allowLateSubmission: row.allow_late_submission,
     totalScore: row.total_score,
     showAnswersAfterSubmit: row.show_answers_after_submit,
+    showScoreAfterSubmit: row.show_score_after_submit,
     questionCount: Number(row.question_count || 0),
     studentCount: Number(row.student_count || 0),
     submittedCount: Number(row.submitted_count || 0),
@@ -210,7 +211,14 @@ class HomeworkService {
       total: parseInt(countResult.rows[0]?.count || '0', 10),
       page: toInt(page, 1),
       limit: toInt(limit, 20),
-      homeworkAssignments: rowsResult.rows.map(camelAssignment),
+      homeworkAssignments: rowsResult.rows.map((row) => {
+        const item = camelAssignment(row);
+        if (isStudentOnly(user) && !row.show_score_after_submit) {
+          item.myTotalScore = null;
+          item.my_total_score = null;
+        }
+        return item;
+      }),
     };
   }
 
@@ -275,18 +283,29 @@ class HomeworkService {
     const mySubmission = isStudentOnly(user) ? students[0] || null : null;
 
     let questions = questionsResult.rows.map(camelQuestion);
+    let canRevealAnswers;
+    let canRevealScore;
     if (isStudentOnly(user)) {
       const hasSubmitted = ['submitted', 'graded'].includes(String(mySubmission?.submissionStatus || '').toLowerCase());
-      const canRevealAnswers = !!assignment.show_answers_after_submit && hasSubmitted;
+      canRevealAnswers = !!assignment.show_answers_after_submit && hasSubmitted;
+      canRevealScore = !!assignment.show_score_after_submit && hasSubmitted;
+
       if (!canRevealAnswers) {
         questions = questions.map((question) => ({ ...question, correctAnswer: null }));
-        if (mySubmission) {
-          const stripAnswer = (answer) => {
-            const { isCorrect, score, ...rest } = answer || {};
-            return rest;
-          };
-          mySubmission.answers = (mySubmission.answers || []).map(stripAnswer);
-          mySubmission.submissionAnswers = (mySubmission.submissionAnswers || []).map(stripAnswer);
+      }
+      if (mySubmission) {
+        const stripAnswer = (answer) => {
+          const rest = { ...(answer || {}) };
+          if (!canRevealAnswers) delete rest.isCorrect;
+          if (!canRevealScore) delete rest.score;
+          return rest;
+        };
+        mySubmission.answers = (mySubmission.answers || []).map(stripAnswer);
+        mySubmission.submissionAnswers = (mySubmission.submissionAnswers || []).map(stripAnswer);
+        if (!canRevealScore) {
+          mySubmission.submissionTotalScore = null;
+          mySubmission.total_score = null;
+          mySubmission.myTotalScore = null;
         }
       }
     }
@@ -296,9 +315,8 @@ class HomeworkService {
       questions,
       students,
       mySubmission,
-      canRevealAnswers: isStudentOnly(user)
-        ? (!!assignment.show_answers_after_submit && ['submitted', 'graded'].includes(String(mySubmission?.submissionStatus || '').toLowerCase()))
-        : undefined,
+      canRevealAnswers: isStudentOnly(user) ? canRevealAnswers : undefined,
+      canRevealScore: isStudentOnly(user) ? canRevealScore : undefined,
     };
   }
 
@@ -313,8 +331,8 @@ class HomeworkService {
 
       const assignmentResult = await client.query(
         `INSERT INTO homework_assignments
-         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
+         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
          RETURNING *`,
         [
           tenantId,
@@ -327,6 +345,7 @@ class HomeworkService {
           data.totalScore || 100,
           data.status || 'draft',
           !!data.showAnswersAfterSubmit,
+          data.showScoreAfterSubmit !== undefined ? !!data.showScoreAfterSubmit : true,
           user?.id || null,
         ]
       );
@@ -377,9 +396,9 @@ class HomeworkService {
              total_score=$7,
              status=$8,
              show_answers_after_submit=$9,
-             updated_by=$10,
-             updated_at=NOW()
-         WHERE id=$11 AND tenant_id=$12
+             show_score_after_submit=$10,
+             updated_by=$11, updated_at=NOW()
+         WHERE id=$12 AND tenant_id=$13
          RETURNING *`,
         [
           data.classId || current.rows[0].class_id,
@@ -391,6 +410,7 @@ class HomeworkService {
           data.totalScore || 100,
           data.status || current.rows[0].status,
           data.showAnswersAfterSubmit !== undefined ? !!data.showAnswersAfterSubmit : current.rows[0].show_answers_after_submit,
+          data.showScoreAfterSubmit !== undefined ? !!data.showScoreAfterSubmit : current.rows[0].show_score_after_submit,
           user?.id || null,
           id,
           tenantId,

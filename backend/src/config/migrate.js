@@ -14,12 +14,14 @@ const statements = [
     total_score NUMERIC(10,2) NOT NULL DEFAULT 100,
     status VARCHAR(30) NOT NULL DEFAULT 'draft',
     show_answers_after_submit BOOLEAN NOT NULL DEFAULT FALSE,
+    show_score_after_submit BOOLEAN NOT NULL DEFAULT TRUE,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS show_answers_after_submit BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS show_score_after_submit BOOLEAN NOT NULL DEFAULT TRUE`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_status ON homework_assignments(tenant_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_class ON homework_assignments(tenant_id, class_id)`,
   `CREATE TABLE IF NOT EXISTS homework_assignment_questions (

@@ -56,6 +56,7 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     totalScore: initial?.total_score || initial?.totalScore || 100,
     status: initial?.status || 'draft',
     showAnswersAfterSubmit: initial?.show_answers_after_submit ?? initial?.showAnswersAfterSubmit ?? false,
+    showScoreAfterSubmit: initial?.show_score_after_submit ?? initial?.showScoreAfterSubmit ?? true,
     questions: initial?.questions?.length
       ? initial.questions.map((question: any, index: number) => ({
           orderNumber: question.order_number || question.orderNumber || index + 1,
@@ -223,6 +224,21 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
               checked={!!form.showAnswersAfterSubmit}
               onChange={(e) => setForm((prev: any) => ({ ...prev, showAnswersAfterSubmit: e.target.checked }))}
             />
+            <span className="toggle-track" />
+          </label>
+        </div>
+
+        <div className="toggle-row">
+          <div className="toggle-row-text">
+            <div className="toggle-row-title">Cho phép học viên xem điểm sau khi nộp bài</div>
+            <div className="toggle-row-desc">
+              {form.showScoreAfterSubmit
+                ? 'Bật: học viên thấy điểm tổng và nhận xét ngay sau khi nộp/được chấm.'
+                : 'Tắt: học viên chỉ biết bài đã nộp/đã chấm, không thấy điểm số hay nhận xét.'}
+            </div>
+          </div>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={!!form.showScoreAfterSubmit} onChange={(e) => setForm((prev: any) => ({ ...prev, showScoreAfterSubmit: e.target.checked }))} />
             <span className="toggle-track" />
           </label>
         </div>
@@ -656,11 +672,16 @@ export default function HomeworkAssignmentsPage() {
                       <b>{row.title}</b>
                       <div style={{ color: 'var(--gray-500)', fontSize: 12 }}>{row.description}</div>
                       {canManage && (
-                        <div style={{ marginTop: 4 }}>
+                        <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {(row.showAnswersAfterSubmit || row.show_answers_after_submit) ? (
-                            <Badge variant="green"><Eye size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện đáp án sau nộp</Badge>
+                            <Badge variant="green"><Eye size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện đáp án</Badge>
                           ) : (
                             <Badge variant="gray"><EyeOff size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ẩn đáp án</Badge>
+                          )}
+                          {(row.showScoreAfterSubmit ?? row.show_score_after_submit ?? true) ? (
+                            <Badge variant="blue"><CheckCircle2 size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện điểm</Badge>
+                          ) : (
+                            <Badge variant="gray"><XCircle size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ẩn điểm</Badge>
                           )}
                         </div>
                       )}
