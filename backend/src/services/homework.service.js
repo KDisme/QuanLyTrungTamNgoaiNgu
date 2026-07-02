@@ -1,0 +1,686 @@
+const pool = require('../config/database');
+
+function toInt(value, fallback) {
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function toJson(value, fallback = []) {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch { return fallback; }
+  }
+  return value;
+}
+
+function hasAnyRole(user, roles = []) {
+  const userRoles = user?.roles || [];
+  return roles.some((role) => userRoles.includes(role));
+}
+
+function isAdminStaff(user) {
+  return hasAnyRole(user, ['admin', 'staff']);
+}
+
+function isTeacherOnly(user) {
+  return hasAnyRole(user, ['teacher']) && !isAdminStaff(user);
+}
+
+function isStudentOnly(user) {
+  return hasAnyRole(user, ['student']) && !isAdminStaff(user) && !hasAnyRole(user, ['teacher']);
+}
+
+function camelQuestion(row) {
+  return row ? {
+    ...row,
+    questionType: row.question_type,
+    questionText: row.question_text,
+    helpText: row.help_text,
+    isRequired: row.is_required,
+    orderNumber: row.order_number,
+    correctAnswer: row.correct_answer,
+    assignmentId: row.assignment_id,
+    questionCount: row.question_count,
+    options: toJson(row.options, []),
+    metadata: toJson(row.metadata, {}),
+  } : row;
+}
+
+function camelAssignment(row) {
+  return row ? {
+    ...row,
+    classId: row.class_id,
+    className: row.class_name,
+    dueDate: row.due_date,
+    allowLateSubmission: row.allow_late_submission,
+    totalScore: row.total_score,
+    showAnswersAfterSubmit: row.show_answers_after_submit,
+    questionCount: Number(row.question_count || 0),
+    studentCount: Number(row.student_count || 0),
+    submittedCount: Number(row.submitted_count || 0),
+    myAssignmentStudentId: row.my_assignment_student_id,
+    myStatus: row.my_status,
+    myTotalScore: row.my_total_score,
+    mySubmittedAt: row.my_submitted_at,
+    myFeedback: row.my_feedback,
+  } : row;
+}
+
+function camelStudent(row) {
+  return row ? {
+    ...row,
+    studentId: row.student_id,
+    studentName: row.full_name,
+    studentEmail: row.email,
+    assignmentStudentId: row.id,
+    submissionId: row.submission_id,
+    submissionStatus: row.submission_status,
+    submissionSubmittedAt: row.submission_submitted_at,
+    submissionTotalScore: row.submission_total_score,
+    submissionFeedback: row.submission_feedback,
+    submissionAnswers: toJson(row.submission_answers, []),
+    answers: toJson(row.submission_answers, []),
+  } : row;
+}
+
+function normalizeQuestions(questions = []) {
+  return questions
+    .map((question, index) => {
+      const questionType = String(question.questionType || question.question_type || 'multiple_choice_4');
+      const options = Array.isArray(question.options)
+        ? question.options.map((option) => ({
+            label: String(option.label || option.optionLabel || '').trim().toUpperCase(),
+            text: String(option.text || option.optionText || '').trim(),
+          })).filter((option) => option.label)
+        : [];
+      const rawCorrect = question.correctAnswer ?? question.correct_answer ?? '';
+      const correctAnswer = String(rawCorrect || '').trim();
+      return {
+        orderNumber: toInt(question.orderNumber ?? question.order_number, index + 1),
+        questionType,
+        questionText: String(question.questionText ?? question.question_text ?? '').trim(),
+        helpText: String(question.helpText ?? question.help_text ?? '').trim() || null,
+        isRequired: question.isRequired ?? question.is_required ?? true,
+        score: Number(question.score || 1),
+        correctAnswer: correctAnswer || null,
+        options,
+        metadata: toJson(question.metadata, {}),
+      };
+    })
+    .filter((question) => question.questionText);
+}
+
+function normalizeAnswerValue(value) {
+  return String(value == null ? '' : value).trim().toLowerCase();
+}
+
+function isTeacherOfClass(client, tenantId, classId, teacherId) {
+  return client.query(
+    `SELECT 1 FROM class_teachers WHERE tenant_id=$1 AND class_id=$2 AND teacher_id=$3 LIMIT 1`,
+    [tenantId, classId, teacherId]
+  );
+}
+
+async function ensureStudentHomeworkAssignments(tenantId, studentId) {
+  const assignments = await pool.query(
+    `SELECT DISTINCT a.id
+     FROM homework_assignments a
+     JOIN class_students cs ON cs.tenant_id = a.tenant_id AND cs.class_id = a.class_id
+     WHERE a.tenant_id = $1
+       AND cs.student_id = $2
+       AND cs.status = 'active'`,
+    [tenantId, studentId]
+  );
+  if (!assignments.rows.length) return;
+  for (const row of assignments.rows) {
+    await pool.query(
+      `INSERT INTO homework_assignment_students (tenant_id, assignment_id, student_id, status)
+       VALUES ($1,$2,$3,'assigned')
+       ON CONFLICT (assignment_id, student_id)
+       DO NOTHING`,
+      [tenantId, row.id, studentId]
+    );
+  }
+}
+
+class HomeworkService {
+  async listAssignments(tenantId, user, { search, status, page = 1, limit = 20 }) {
+    if (isStudentOnly(user)) await ensureStudentHomeworkAssignments(tenantId, user.id);
+    const offset = (toInt(page, 1) - 1) * toInt(limit, 20);
+    const conditions = ['a.tenant_id = $1'];
+    const params = [tenantId];
+    let idx = 2;
+
+    if (search) {
+      conditions.push(`(a.title ILIKE $${idx} OR a.description ILIKE $${idx} OR a.instructions ILIKE $${idx})`);
+      params.push(`%${search}%`);
+      idx++;
+    }
+    if (status) {
+      conditions.push(`a.status = $${idx}`);
+      params.push(status);
+      idx++;
+    }
+    if (isTeacherOnly(user)) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM class_teachers ct
+        WHERE ct.tenant_id = a.tenant_id AND ct.class_id = a.class_id AND ct.teacher_id = $${idx}
+      )`);
+      params.push(user.id);
+      idx++;
+    }
+    if (isStudentOnly(user)) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM homework_assignment_students s_scope
+        WHERE s_scope.tenant_id = a.tenant_id AND s_scope.assignment_id = a.id AND s_scope.student_id = $${idx}
+      )`);
+      params.push(user.id);
+      idx++;
+      conditions.push(`a.status <> 'draft'`);
+    }
+
+    const where = conditions.join(' AND ');
+    const studentJoin = isStudentOnly(user)
+      ? `LEFT JOIN homework_assignment_students my_asg ON my_asg.assignment_id = a.id AND my_asg.tenant_id = a.tenant_id AND my_asg.student_id = ${'$'}${idx - 1}`
+      : '';
+    const studentSelect = isStudentOnly(user)
+      ? `, my_asg.id AS my_assignment_student_id, my_asg.status AS my_status, my_asg.total_score AS my_total_score, my_asg.submitted_at AS my_submitted_at, my_asg.feedback AS my_feedback`
+      : '';
+    const studentParams = params;
+
+    const [countResult, rowsResult] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM homework_assignments a WHERE ${where}`, params),
+      pool.query(
+        `SELECT a.*, c.name AS class_name,
+          (SELECT COUNT(*) FROM homework_assignment_questions q WHERE q.assignment_id = a.id AND q.tenant_id = a.tenant_id) AS question_count,
+          (SELECT COUNT(*) FROM homework_assignment_students s WHERE s.assignment_id = a.id AND s.tenant_id = a.tenant_id) AS student_count,
+          (SELECT COUNT(*) FROM homework_assignment_students s JOIN homework_submissions sub ON sub.assignment_student_id = s.id WHERE s.assignment_id = a.id AND s.tenant_id = a.tenant_id AND sub.status IN ('submitted', 'graded')) AS submitted_count
+          ${studentSelect}
+         FROM homework_assignments a
+         LEFT JOIN classes c ON c.id = a.class_id
+         ${studentJoin}
+         WHERE ${where}
+         ORDER BY a.created_at DESC
+         LIMIT $${idx} OFFSET $${idx + 1}`,
+        [...studentParams, toInt(limit, 20), offset]
+      ),
+    ]);
+
+    return {
+      total: parseInt(countResult.rows[0]?.count || '0', 10),
+      page: toInt(page, 1),
+      limit: toInt(limit, 20),
+      homeworkAssignments: rowsResult.rows.map(camelAssignment),
+    };
+  }
+
+  async getAssignment(tenantId, id, user = null) {
+    if (isStudentOnly(user)) await ensureStudentHomeworkAssignments(tenantId, user.id);
+    const assignmentResult = await pool.query(
+      `SELECT a.*, c.name AS class_name
+       FROM homework_assignments a
+       LEFT JOIN classes c ON c.id = a.class_id
+       WHERE a.id = $1 AND a.tenant_id = $2`,
+      [id, tenantId]
+    );
+    if (!assignmentResult.rows.length) return null;
+    const assignment = assignmentResult.rows[0];
+    const roles = user?.roles || [];
+
+    if (isTeacherOnly(user)) {
+      const allowed = await pool.query(
+        `SELECT 1 FROM class_teachers WHERE tenant_id=$1 AND class_id=$2 AND teacher_id=$3 LIMIT 1`,
+        [tenantId, assignment.class_id, user.id]
+      );
+      if (!allowed.rows.length) return null;
+    }
+
+    if (isStudentOnly(user)) {
+      const allowed = await pool.query(
+        `SELECT 1 FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2 AND student_id=$3 LIMIT 1`,
+        [tenantId, id, user.id]
+      );
+      if (!allowed.rows.length) return null;
+      if (assignment.status === 'draft') return null;
+    }
+
+    const questionsResult = await pool.query(
+      `SELECT * FROM homework_assignment_questions WHERE tenant_id=$1 AND assignment_id=$2 ORDER BY order_number`,
+      [tenantId, id]
+    );
+
+    const studentCondition = isStudentOnly(user)
+      ? 's.assignment_id = $1 AND s.tenant_id = $2 AND s.student_id = $3'
+      : 's.assignment_id = $1 AND s.tenant_id = $2';
+    const studentParams = isStudentOnly(user) ? [id, tenantId, user.id] : [id, tenantId];
+    const studentsResult = await pool.query(
+      `SELECT s.*, u.full_name, u.email,
+        sub.id AS submission_id,
+        sub.status AS submission_status,
+        sub.submitted_at AS submission_submitted_at,
+        sub.total_score AS submission_total_score,
+        sub.feedback AS submission_feedback,
+        sub.answers AS submission_answers,
+        sub.graded_by,
+        sub.graded_at
+       FROM homework_assignment_students s
+       JOIN users u ON u.id = s.student_id
+       LEFT JOIN homework_submissions sub ON sub.assignment_student_id = s.id
+       WHERE ${studentCondition}
+       ORDER BY u.full_name`,
+      studentParams
+    );
+
+    const students = studentsResult.rows.map(camelStudent);
+    const mySubmission = isStudentOnly(user) ? students[0] || null : null;
+
+    let questions = questionsResult.rows.map(camelQuestion);
+    if (isStudentOnly(user)) {
+      const hasSubmitted = ['submitted', 'graded'].includes(String(mySubmission?.submissionStatus || '').toLowerCase());
+      const canRevealAnswers = !!assignment.show_answers_after_submit && hasSubmitted;
+      if (!canRevealAnswers) {
+        questions = questions.map((question) => ({ ...question, correctAnswer: null }));
+        if (mySubmission) {
+          const stripAnswer = (answer) => {
+            const { isCorrect, score, ...rest } = answer || {};
+            return rest;
+          };
+          mySubmission.answers = (mySubmission.answers || []).map(stripAnswer);
+          mySubmission.submissionAnswers = (mySubmission.submissionAnswers || []).map(stripAnswer);
+        }
+      }
+    }
+
+    return {
+      ...camelAssignment(assignment),
+      questions,
+      students,
+      mySubmission,
+      canRevealAnswers: isStudentOnly(user)
+        ? (!!assignment.show_answers_after_submit && ['submitted', 'graded'].includes(String(mySubmission?.submissionStatus || '').toLowerCase()))
+        : undefined,
+    };
+  }
+
+  async createAssignment(tenantId, user, data) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (isTeacherOnly(user) && data.classId) {
+        const allowed = await isTeacherOfClass(client, tenantId, data.classId, user.id);
+        if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
+      }
+
+      const assignmentResult = await client.query(
+        `INSERT INTO homework_assignments
+         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
+         RETURNING *`,
+        [
+          tenantId,
+          data.classId || null,
+          data.title,
+          data.description || null,
+          data.instructions || null,
+          data.dueDate || null,
+          !!data.allowLateSubmission,
+          data.totalScore || 100,
+          data.status || 'draft',
+          !!data.showAnswersAfterSubmit,
+          user?.id || null,
+        ]
+      );
+      const assignment = assignmentResult.rows[0];
+
+      await this._replaceQuestions(client, tenantId, assignment.id, data.questions || []);
+      await this._syncStudents(client, tenantId, assignment.id, data.classId || null, data.studentIds || []);
+
+      await client.query('COMMIT');
+      return this.getAssignment(tenantId, assignment.id, user);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateAssignment(tenantId, id, user, data) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        `SELECT * FROM homework_assignments WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
+        [id, tenantId]
+      );
+      if (!current.rows.length) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      if (isTeacherOnly(user)) {
+        const allowed = await isTeacherOfClass(client, tenantId, current.rows[0].class_id, user.id);
+        if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể sửa bài tập của lớp mình phụ trách'), { status: 403 });
+      }
+      if (isTeacherOnly(user) && data.classId) {
+        const allowed = await isTeacherOfClass(client, tenantId, data.classId, user.id);
+        if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
+      }
+
+      const assignmentResult = await client.query(
+        `UPDATE homework_assignments
+         SET class_id=$1,
+             title=$2,
+             description=$3,
+             instructions=$4,
+             due_date=$5,
+             allow_late_submission=$6,
+             total_score=$7,
+             status=$8,
+             show_answers_after_submit=$9,
+             updated_by=$10,
+             updated_at=NOW()
+         WHERE id=$11 AND tenant_id=$12
+         RETURNING *`,
+        [
+          data.classId || current.rows[0].class_id,
+          data.title,
+          data.description || null,
+          data.instructions || null,
+          data.dueDate || null,
+          !!data.allowLateSubmission,
+          data.totalScore || 100,
+          data.status || current.rows[0].status,
+          data.showAnswersAfterSubmit !== undefined ? !!data.showAnswersAfterSubmit : current.rows[0].show_answers_after_submit,
+          user?.id || null,
+          id,
+          tenantId,
+        ]
+      );
+      if (!assignmentResult.rows.length) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      if (Array.isArray(data.questions)) {
+        await this._replaceQuestions(client, tenantId, id, data.questions);
+      }
+      if (data.reassign || Array.isArray(data.studentIds) || data.classId !== undefined) {
+        await this._syncStudents(client, tenantId, id, data.classId || assignmentResult.rows[0].class_id || null, data.studentIds || []);
+      }
+
+      await client.query('COMMIT');
+      return this.getAssignment(tenantId, id, user);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteAssignment(tenantId, id, user = null) {
+    const assignment = await pool.query('SELECT class_id FROM homework_assignments WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
+    if (!assignment.rows.length) return;
+    if (isTeacherOnly(user)) {
+      const allowed = await pool.query('SELECT 1 FROM class_teachers WHERE tenant_id=$1 AND class_id=$2 AND teacher_id=$3 LIMIT 1', [tenantId, assignment.rows[0].class_id, user.id]);
+      if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể xoá bài tập của lớp mình phụ trách'), { status: 403 });
+    }
+    await pool.query('DELETE FROM homework_assignments WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
+  }
+
+  async submitAssignment(tenantId, assignmentId, studentId, payload) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await ensureStudentHomeworkAssignments(tenantId, studentId);
+      const assignmentResult = await client.query(
+        `SELECT * FROM homework_assignments WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
+        [assignmentId, tenantId]
+      );
+      if (!assignmentResult.rows.length) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const assignment = assignmentResult.rows[0];
+      if (assignment.status !== 'active') throw Object.assign(new Error('Bài tập chưa mở hoặc đã đóng'), { status: 400 });
+      if (assignment.due_date && !assignment.allow_late_submission && new Date() > new Date(assignment.due_date)) {
+        throw Object.assign(new Error('Đã hết hạn nộp bài'), { status: 400 });
+      }
+
+      const assignmentStudentResult = await client.query(
+        `SELECT * FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2 AND student_id=$3 FOR UPDATE`,
+        [tenantId, assignmentId, studentId]
+      );
+      if (!assignmentStudentResult.rows.length) {
+        throw Object.assign(new Error('Bạn chưa được giao bài này'), { status: 403 });
+      }
+
+      const questionsResult = await client.query(
+        `SELECT * FROM homework_assignment_questions WHERE tenant_id=$1 AND assignment_id=$2 ORDER BY order_number`,
+        [tenantId, assignmentId]
+      );
+      const questionMap = new Map(questionsResult.rows.map((row) => [Number(row.id), row]));
+      const answerItems = Array.isArray(payload?.answers) ? payload.answers : [];
+      const storedAnswers = [];
+      let totalScore = 0;
+      let hasEssay = false;
+
+      for (const answer of answerItems) {
+        const questionId = Number(answer.questionId || answer.question_id);
+        const question = questionMap.get(questionId);
+        if (!question) continue;
+
+        const questionType = String(question.question_type || '').toLowerCase();
+        const answerText = String(answer.answerText ?? answer.answer_text ?? '').trim();
+        const selectedAnswer = String(answer.selectedAnswer ?? answer.selected_answer ?? answer.answerValue ?? answer.answer_value ?? '').trim();
+        const score = Number(question.score || 1);
+        let isCorrect = null;
+
+        if (questionType === 'essay') {
+          hasEssay = true;
+        } else if (questionType === 'true_false') {
+          const expected = normalizeAnswerValue(question.correct_answer);
+          const actual = normalizeAnswerValue(selectedAnswer || answerText);
+          isCorrect = expected === actual;
+          totalScore += isCorrect ? score : 0;
+        } else if (questionType === 'multiple_choice_4') {
+          const expected = normalizeAnswerValue(question.correct_answer);
+          const actual = normalizeAnswerValue(selectedAnswer || answerText);
+          isCorrect = expected === actual;
+          totalScore += isCorrect ? score : 0;
+        }
+
+        storedAnswers.push({
+          questionId,
+          questionType,
+          answerText: answerText || null,
+          selectedAnswer: selectedAnswer || null,
+          isCorrect,
+          score: isCorrect === true ? score : 0,
+          metadata: toJson(answer.metadata, {}),
+        });
+      }
+
+      const status = hasEssay ? 'submitted' : 'graded';
+      const gradedAt = status === 'graded' ? new Date() : null;
+      const submissionResult = await client.query(
+        `INSERT INTO homework_submissions
+         (tenant_id, assignment_student_id, answers, status, total_score, feedback, submitted_by, submitted_at, graded_by, graded_at)
+         VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,NOW(),$7,$8)
+         ON CONFLICT (assignment_student_id)
+         DO UPDATE SET answers=EXCLUDED.answers,
+           status=EXCLUDED.status,
+           total_score=EXCLUDED.total_score,
+           feedback=EXCLUDED.feedback,
+           submitted_by=EXCLUDED.submitted_by,
+           submitted_at=NOW(),
+           graded_by=COALESCE(EXCLUDED.graded_by, homework_submissions.graded_by),
+           graded_at=COALESCE(EXCLUDED.graded_at, homework_submissions.graded_at),
+           updated_at=NOW()
+         RETURNING *`,
+        [tenantId, assignmentStudentResult.rows[0].id, JSON.stringify(storedAnswers), status, totalScore, payload?.feedback || null, studentId, gradedAt]
+      );
+
+      const updatedStudent = await client.query(
+        `UPDATE homework_assignment_students
+         SET status=$1,
+             submitted_at=NOW(),
+             total_score=$2,
+             feedback=$3,
+             updated_at=NOW()
+         WHERE id=$4 AND tenant_id=$5
+         RETURNING *`,
+        [status, totalScore, payload?.feedback || null, assignmentStudentResult.rows[0].id, tenantId]
+      );
+
+      await client.query('COMMIT');
+      return { ...updatedStudent.rows[0], submission: submissionResult.rows[0] };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async gradeSubmission(tenantId, submissionId, userId, data) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const submissionResult = await client.query(
+        `SELECT sub.*, s.tenant_id, s.assignment_id, s.student_id
+         FROM homework_submissions sub
+         JOIN homework_assignment_students s ON s.id = sub.assignment_student_id
+         WHERE sub.id=$1 AND sub.tenant_id=$2
+         FOR UPDATE`,
+        [submissionId, tenantId]
+      );
+      if (!submissionResult.rows.length) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const submission = submissionResult.rows[0];
+      const feedback = data.feedback ?? submission.feedback ?? null;
+      const answers = Array.isArray(data.answers) ? data.answers : [];
+
+      const currentAnswers = toJson(submission.answers, []);
+      const answerMap = new Map(currentAnswers.map((answer) => [Number(answer.questionId || answer.question_id), { ...answer }]));
+
+      for (const answer of answers) {
+        const questionId = Number(answer.questionId || answer.question_id);
+        if (!questionId) continue;
+        const existing = answerMap.get(questionId) || {};
+        const nextScore = Number(answer.score ?? existing.score ?? 0);
+        answerMap.set(questionId, {
+          ...existing,
+          ...answer,
+          questionId,
+          score: Number.isFinite(nextScore) ? nextScore : 0,
+        });
+      }
+
+      const mergedAnswers = Array.from(answerMap.values());
+      const score = mergedAnswers.reduce((sum, answer) => sum + Number(answer.score || 0), 0);
+
+      const submissionParams = [score, feedback, userId];
+      const submissionUpdates = [
+        'total_score=$1',
+        'feedback=$2',
+        "status='graded'",
+        'graded_by=$3',
+        'graded_at=NOW()',
+      ];
+      submissionUpdates.push(`answers=$${submissionParams.length + 1}::jsonb`);
+      submissionParams.push(JSON.stringify(mergedAnswers));
+      submissionParams.push(submissionId, tenantId);
+      const updatedSubmission = await client.query(
+        `UPDATE homework_submissions
+         SET ${submissionUpdates.join(', ')},
+             updated_at=NOW()
+         WHERE id=$${submissionParams.length - 1} AND tenant_id=$${submissionParams.length}
+         RETURNING *`,
+        submissionParams
+      );
+
+      await client.query(
+        `UPDATE homework_assignment_students
+         SET status='graded', total_score=$1, feedback=$2, updated_at=NOW()
+         WHERE id=$3 AND tenant_id=$4`,
+        [score, feedback, submission.assignment_student_id, tenantId]
+      );
+
+      await client.query('COMMIT');
+      return updatedSubmission.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async _replaceQuestions(client, tenantId, assignmentId, questions) {
+    const normalizedQuestions = normalizeQuestions(questions);
+    await client.query('DELETE FROM homework_assignment_questions WHERE tenant_id=$1 AND assignment_id=$2', [tenantId, assignmentId]);
+    for (const question of normalizedQuestions) {
+      if (question.questionType === 'multiple_choice_4') {
+        if (question.options.length !== 4) {
+          throw Object.assign(new Error('Câu trắc nghiệm 4 đáp án phải có đúng 4 lựa chọn'), { status: 400 });
+        }
+        if (!question.correctAnswer || !['A', 'B', 'C', 'D'].includes(String(question.correctAnswer).toUpperCase())) {
+          throw Object.assign(new Error('Câu trắc nghiệm 4 đáp án phải chọn 1 đáp án đúng A/B/C/D'), { status: 400 });
+        }
+      }
+      if (question.questionType === 'true_false' && !['true', 'false', 'đúng', 'sai'].includes(normalizeAnswerValue(question.correctAnswer))) {
+        throw Object.assign(new Error('Câu True/False phải chọn đáp án đúng hoặc sai'), { status: 400 });
+      }
+      if (question.questionType === 'essay') {
+        question.correctAnswer = null;
+      }
+
+      await client.query(
+        `INSERT INTO homework_assignment_questions
+         (tenant_id, assignment_id, order_number, question_type, question_text, help_text, is_required, score, correct_answer, options, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`,
+        [
+          tenantId,
+          assignmentId,
+          question.orderNumber,
+          question.questionType,
+          question.questionText,
+          question.helpText,
+          !!question.isRequired,
+          question.score || 1,
+          question.correctAnswer,
+          JSON.stringify(question.options || []),
+          JSON.stringify(question.metadata || {}),
+        ]
+      );
+    }
+  }
+
+  async _syncStudents(client, tenantId, assignmentId, classId, studentIds = []) {
+    await client.query('DELETE FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2', [tenantId, assignmentId]);
+    const ids = new Set((studentIds || []).map(Number).filter(Boolean));
+
+    if (classId) {
+      const classStudents = await client.query(
+        `SELECT student_id FROM class_students WHERE tenant_id=$1 AND class_id=$2 AND status='active'`,
+        [tenantId, classId]
+      );
+      classStudents.rows.forEach((row) => ids.add(Number(row.student_id)));
+    }
+
+    for (const studentId of ids) {
+      await client.query(
+        `INSERT INTO homework_assignment_students (tenant_id, assignment_id, student_id, status)
+         VALUES ($1,$2,$3,'assigned')
+         ON CONFLICT (assignment_id, student_id)
+         DO UPDATE SET status='assigned', submitted_at=NULL, total_score=NULL, feedback=NULL, updated_at=NOW()`,
+        [tenantId, assignmentId, studentId]
+      );
+    }
+  }
+}
+
+module.exports = new HomeworkService();
