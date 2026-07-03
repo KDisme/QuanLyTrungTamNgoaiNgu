@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, CheckCircle2, XCircle, Clock3, Send, Sparkles, Eye, EyeOff, MessageSquare } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Clock3, Send, Sparkles, Eye, EyeOff, MessageSquare, Lock, KeyRound } from 'lucide-react';
 import { homeworkApi } from '../../api';
 import { Badge, EmptyState, Loading, StatusBadge } from '../../components/common';
 
@@ -39,13 +39,21 @@ export default function HomeworkTakePage() {
   const [saving, setSaving] = useState(false);
   const [answers, setAnswers] = useState<AnswerState>({});
   const [results, setResults] = useState<ResultState>({});
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifiedPassword, setVerifiedPassword] = useState<string | undefined>(undefined);
 
-  const load = async () => {
+  const load = async (password?: string) => {
     setLoading(true);
     try {
-      const res = await homeworkApi.getById(assignmentId);
+      const res = await homeworkApi.getById(assignmentId, password);
       const item = res.data;
       setDetail(item);
+      setNeedsPassword(false);
+      setPasswordError('');
+      if (password) setVerifiedPassword(password);
 
       const submission = item.mySubmission || item.students?.[0] || null;
       const initialAnswers: AnswerState = {};
@@ -63,9 +71,25 @@ export default function HomeworkTakePage() {
       setAnswers(initialAnswers);
       setResults(initialResults);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Không tải được bài tập');
+      const code = err.response?.data?.code;
+      if (code === 'PASSWORD_REQUIRED' || code === 'INVALID_PASSWORD') {
+        setNeedsPassword(true);
+        setPasswordError(code === 'INVALID_PASSWORD' ? 'Sai mật khẩu, vui lòng thử lại.' : '');
+      } else {
+        toast.error(err.response?.data?.message || 'Không tải được bài tập');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const unlock = async () => {
+    if (!passwordInput.trim()) return;
+    setVerifying(true);
+    try {
+      await load(passwordInput.trim());
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -102,9 +126,9 @@ export default function HomeworkTakePage() {
 
     setSaving(true);
     try {
-      await homeworkApi.submit(assignmentId, { answers: payloadAnswers });
+      await homeworkApi.submit(assignmentId, { answers: payloadAnswers, password: verifiedPassword });
       toast.success('Đã nộp bài tập');
-      await load();
+      await load(verifiedPassword);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Không nộp được bài');
     } finally {
@@ -122,6 +146,34 @@ export default function HomeworkTakePage() {
       feedback: submission.submissionFeedback || submission.myFeedback || submission.feedback || '',
     };
   }, [submission]);
+
+  if (needsPassword) {
+    return (
+      <div style={{ maxWidth: 420, margin: '80px auto', textAlign: 'center' }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 24 }}><ArrowLeft size={14} /> Quay lại</button>
+        <div style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--primary-light)', display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}>
+          <Lock color="var(--primary)" size={28} />
+        </div>
+        <h2 style={{ margin: '0 0 6px' }}>Bài tập yêu cầu mật khẩu</h2>
+        <p style={{ color: 'var(--gray-500)', marginBottom: 20 }}>Nhập mật khẩu giáo viên đã cung cấp để bắt đầu làm bài.</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="password"
+            className="form-input"
+            placeholder="Mật khẩu bài tập"
+            value={passwordInput}
+            onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(''); }}
+            onKeyDown={(e) => e.key === 'Enter' && unlock()}
+            autoFocus
+          />
+          <button className="btn btn-primary" onClick={unlock} disabled={verifying || !passwordInput.trim()}>
+            <KeyRound size={14} /> {verifying ? 'Đang mở...' : 'Mở bài'}
+          </button>
+        </div>
+        {passwordError && <div style={{ color: 'var(--danger)', fontSize: 13, marginTop: 10, textAlign: 'left' }}>{passwordError}</div>}
+      </div>
+    );
+  }
 
   if (loading) return <Loading />;
   if (!detail) return <EmptyState message="Không tìm thấy bài tập" />;

@@ -15,6 +15,8 @@ const statements = [
     status VARCHAR(30) NOT NULL DEFAULT 'draft',
     show_answers_after_submit BOOLEAN NOT NULL DEFAULT FALSE,
     show_score_after_submit BOOLEAN NOT NULL DEFAULT TRUE,
+    require_password BOOLEAN NOT NULL DEFAULT FALSE,
+    password_hash VARCHAR(255),
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -22,6 +24,8 @@ const statements = [
   )`,
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS show_answers_after_submit BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS show_score_after_submit BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS require_password BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_status ON homework_assignments(tenant_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_class ON homework_assignments(tenant_id, class_id)`,
   `CREATE TABLE IF NOT EXISTS homework_assignment_questions (

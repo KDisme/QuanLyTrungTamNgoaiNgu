@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
+import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { classesApi, homeworkApi } from '../../api';
 import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '../../components/common';
@@ -46,6 +46,7 @@ function createQuestion(type = 'multiple_choice_4', orderNumber = 1): HomeworkQu
 function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose: () => void; onSuccess: () => void }) {
   const [classes, setClasses] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<'info' | 'config' | 'security'>('info');
   const [form, setForm] = useState<any>({
     title: initial?.title || '',
     description: initial?.description || '',
@@ -57,6 +58,8 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     status: initial?.status || 'draft',
     showAnswersAfterSubmit: initial?.show_answers_after_submit ?? initial?.showAnswersAfterSubmit ?? false,
     showScoreAfterSubmit: initial?.show_score_after_submit ?? initial?.showScoreAfterSubmit ?? true,
+    requirePassword: initial?.require_password ?? initial?.requirePassword ?? false,
+    password: '',
     questions: initial?.questions?.length
       ? initial.questions.map((question: any, index: number) => ({
           orderNumber: question.order_number || question.orderNumber || index + 1,
@@ -127,9 +130,27 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     }));
   };
 
+  const goNext = () => {
+    if (tab === 'info') {
+      if (!form.title.trim()) return toast.error('Vui lòng nhập tiêu đề bài tập');
+      if (!form.questions.length) return toast.error('Vui lòng thêm ít nhất 1 câu hỏi');
+      const emptyQuestion = form.questions.find((q: HomeworkQuestion) => !q.questionText.trim());
+      if (emptyQuestion) return toast.error('Vui lòng nhập nội dung cho tất cả câu hỏi');
+      setTab('config');
+      return;
+    }
+    if (tab === 'config') {
+      setTab('security');
+    }
+  };
+
   const submit = async () => {
     if (!form.title.trim()) return toast.error('Vui lòng nhập tiêu đề bài tập');
     if (!form.questions.length) return toast.error('Vui lòng thêm ít nhất 1 câu hỏi');
+    if (form.requirePassword && !form.password.trim() && !(initial?.require_password || initial?.requirePassword)) {
+      setTab('security');
+      return toast.error('Vui lòng nhập mật khẩu cho bài tập');
+    }
 
     const questions = form.questions.map((question: HomeworkQuestion, index: number) => ({
       orderNumber: index + 1,
@@ -170,161 +191,250 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
       footer={(
         <>
           <button className="btn btn-secondary" onClick={onClose}>Huỷ</button>
-          <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu bài tập'}</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {tab !== 'info' && (
+              <button className="btn btn-secondary" onClick={() => setTab(tab === 'security' ? 'config' : 'info')}>Quay lại</button>
+            )}
+            {tab !== 'security' ? (
+              <button className="btn btn-primary" onClick={goNext}>Tiếp theo</button>
+            ) : (
+              <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu bài tập'}</button>
+            )}
+          </div>
         </>
       )}
     >
-      <div style={{ display: 'grid', gap: 14 }}>
-        <div className="grid-2">
-          <div className="form-group" style={{ gridColumn: '1/-1' }}>
-            <label className="form-label">Tiêu đề bài tập</label>
-            <input className="form-input" value={form.title} onChange={(e) => setForm((prev: any) => ({ ...prev, title: e.target.value }))} placeholder="VD: Homework Unit 3 - Present Perfect" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Lớp áp dụng</label>
-            <select className="form-select" value={form.classId || ''} onChange={(e) => setForm((prev: any) => ({ ...prev, classId: e.target.value }))}>
-              <option value="">Chọn lớp</option>
-              {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Hạn nộp</label>
-            <input type="datetime-local" className="form-input" value={form.dueDate} onChange={(e) => setForm((prev: any) => ({ ...prev, dueDate: e.target.value }))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Điểm tối đa</label>
-            <input type="number" className="form-input" value={form.totalScore} onChange={(e) => setForm((prev: any) => ({ ...prev, totalScore: e.target.value }))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Trạng thái</label>
-            <select className="form-select" value={form.status} onChange={(e) => setForm((prev: any) => ({ ...prev, status: e.target.value }))}>
-              <option value="draft">Nháp</option>
-              <option value="active">Đang mở</option>
-              <option value="closed">Đã đóng</option>
-            </select>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, gridColumn: '1/-1' }}>
-            <input type="checkbox" checked={!!form.allowLateSubmission} onChange={(e) => setForm((prev: any) => ({ ...prev, allowLateSubmission: e.target.checked }))} />
-            Cho phép nộp muộn
-          </label>
-        </div>
+      {/* Tab nav */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid var(--gray-100)', paddingBottom: 0 }}>
+        {[
+          { id: 'info', label: 'Thông tin' },
+          { id: 'config', label: 'Cấu hình' },
+          { id: 'security', label: 'Bảo mật' },
+        ].map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id as any)}
+            style={{
+              padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, fontFamily: 'var(--font)',
+              color: tab === t.id ? 'var(--primary)' : 'var(--gray-500)',
+              borderBottom: `2px solid ${tab === t.id ? 'var(--primary)' : 'transparent'}`,
+              marginBottom: -2,
+            }}>{t.label}</button>
+        ))}
+      </div>
 
-        <div className="toggle-row">
-          <div className="toggle-row-text">
-            <div className="toggle-row-title">Cho phép học viên xem đáp án sau khi nộp bài</div>
-            <div className="toggle-row-desc">
-              {form.showAnswersAfterSubmit
-                ? 'Bật: ngay sau khi nộp, học viên sẽ thấy đáp án đúng và biết câu nào đúng/sai.'
-                : 'Tắt: học viên chỉ thấy điểm và nhận xét, không thấy đáp án đúng của từng câu.'}
+      {tab === 'info' && (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div className="grid-2">
+            <div className="form-group" style={{ gridColumn: '1/-1' }}>
+              <label className="form-label">Tiêu đề bài tập</label>
+              <input className="form-input" value={form.title} onChange={(e) => setForm((prev: any) => ({ ...prev, title: e.target.value }))} placeholder="VD: Homework Unit 3 - Present Perfect" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Lớp áp dụng</label>
+              <select className="form-select" value={form.classId || ''} onChange={(e) => setForm((prev: any) => ({ ...prev, classId: e.target.value }))}>
+                <option value="">Chọn lớp</option>
+                {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Hạn nộp</label>
+              <input type="datetime-local" className="form-input" value={form.dueDate} onChange={(e) => setForm((prev: any) => ({ ...prev, dueDate: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Điểm tối đa</label>
+              <input type="number" className="form-input" value={form.totalScore} onChange={(e) => setForm((prev: any) => ({ ...prev, totalScore: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Trạng thái</label>
+              <select className="form-select" value={form.status} onChange={(e) => setForm((prev: any) => ({ ...prev, status: e.target.value }))}>
+                <option value="draft">Nháp</option>
+                <option value="active">Đang mở</option>
+                <option value="closed">Đã đóng</option>
+              </select>
             </div>
           </div>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={!!form.showAnswersAfterSubmit}
-              onChange={(e) => setForm((prev: any) => ({ ...prev, showAnswersAfterSubmit: e.target.checked }))}
-            />
-            <span className="toggle-track" />
-          </label>
-        </div>
 
-        <div className="toggle-row">
-          <div className="toggle-row-text">
-            <div className="toggle-row-title">Cho phép học viên xem điểm sau khi nộp bài</div>
-            <div className="toggle-row-desc">
-              {form.showScoreAfterSubmit
-                ? 'Bật: học viên thấy điểm tổng và nhận xét ngay sau khi nộp/được chấm.'
-                : 'Tắt: học viên chỉ biết bài đã nộp/đã chấm, không thấy điểm số hay nhận xét.'}
+          <div className="form-group">
+            <label className="form-label">Mô tả ngắn</label>
+            <textarea className="form-textarea" rows={2} value={form.description} onChange={(e) => setForm((prev: any) => ({ ...prev, description: e.target.value }))} placeholder="Mục tiêu, chương cần ôn, yêu cầu chung" />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Hướng dẫn làm bài</label>
+            <textarea className="form-textarea" rows={3} value={form.instructions} onChange={(e) => setForm((prev: any) => ({ ...prev, instructions: e.target.value }))} placeholder="Mô tả đề, quy tắc làm bài, lưu ý nộp bài" />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>Danh sách câu hỏi</div>
+              <div style={{ color: 'var(--gray-500)', fontSize: 13 }}>Hỗ trợ True/False, trắc nghiệm 4 đáp án và tự luận.</div>
             </div>
+            <button className="btn btn-secondary" onClick={addQuestion}><Plus size={14} /> Thêm câu</button>
           </div>
-          <label className="toggle-switch">
-            <input type="checkbox" checked={!!form.showScoreAfterSubmit} onChange={(e) => setForm((prev: any) => ({ ...prev, showScoreAfterSubmit: e.target.checked }))} />
-            <span className="toggle-track" />
-          </label>
-        </div>
 
-        <div className="form-group">
-          <label className="form-label">Mô tả ngắn</label>
-          <textarea className="form-textarea" rows={2} value={form.description} onChange={(e) => setForm((prev: any) => ({ ...prev, description: e.target.value }))} placeholder="Mục tiêu, chương cần ôn, yêu cầu chung" />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Hướng dẫn làm bài</label>
-          <textarea className="form-textarea" rows={3} value={form.instructions} onChange={(e) => setForm((prev: any) => ({ ...prev, instructions: e.target.value }))} placeholder="Mô tả đề, quy tắc làm bài, lưu ý nộp bài" />
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 700 }}>Danh sách câu hỏi</div>
-            <div style={{ color: 'var(--gray-500)', fontSize: 13 }}>Hỗ trợ True/False, trắc nghiệm 4 đáp án và tự luận.</div>
-          </div>
-          <button className="btn btn-secondary" onClick={addQuestion}><Plus size={14} /> Thêm câu</button>
-        </div>
-
-        <div style={{ display: 'grid', gap: 12 }}>
-          {form.questions.map((question: HomeworkQuestion, index: number) => (
-            <div key={`${index}-${question.questionType}`} style={{ border: '1px solid var(--gray-200)', borderRadius: 14, padding: 14, background: 'white' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Badge variant="blue">Câu {index + 1}</Badge>
-                  <select className="form-select" style={{ width: 240 }} value={question.questionType} onChange={(e) => changeQuestionType(index, e.target.value)}>
-                    {QUESTION_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-                  </select>
-                </div>
-                <button className="btn btn-danger btn-sm" onClick={() => removeQuestion(index)} disabled={form.questions.length === 1}><Trash2 size={12} /> Xoá</button>
-              </div>
-
-              <div className="grid-2">
-                <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                  <label className="form-label">Nội dung câu hỏi</label>
-                  <textarea className="form-textarea" rows={3} value={question.questionText} onChange={(e) => setQuestion(index, { questionText: e.target.value })} placeholder="Nhập câu hỏi, yêu cầu làm bài hoặc đề bài" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Ghi chú / gợi ý</label>
-                  <input className="form-input" value={question.helpText} onChange={(e) => setQuestion(index, { helpText: e.target.value })} placeholder="Gợi ý nếu cần" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Điểm</label>
-                  <input type="number" className="form-input" value={question.score} onChange={(e) => setQuestion(index, { score: Number(e.target.value) })} />
-                </div>
-              </div>
-
-              {question.questionType === 'multiple_choice_4' && (
-                <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-                  {question.options.map((option, optionIndex) => (
-                    <div key={option.label} style={{ display: 'grid', gridTemplateColumns: '40px 1fr auto', gap: 8, alignItems: 'center' }}>
-                      <div style={{ fontWeight: 700 }}>{option.label}</div>
-                      <input className="form-input" value={option.text} onChange={(e) => updateOption(index, optionIndex, { text: e.target.value })} placeholder={`Đáp án ${option.label}`} />
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                        <input type="radio" name={`correct-${index}`} checked={question.correctAnswer === option.label} onChange={() => setQuestion(index, { correctAnswer: option.label })} />
-                        Đúng
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {question.questionType === 'true_false' && (
-                <div className="grid-2" style={{ marginTop: 10 }}>
-                  <div className="form-group">
-                    <label className="form-label">Đáp án đúng</label>
-                    <select className="form-select" value={question.correctAnswer} onChange={(e) => setQuestion(index, { correctAnswer: e.target.value })}>
-                      <option value="true">Đúng</option>
-                      <option value="false">Sai</option>
+          <div style={{ display: 'grid', gap: 12 }}>
+            {form.questions.map((question: HomeworkQuestion, index: number) => (
+              <div key={`${index}-${question.questionType}`} style={{ border: '1px solid var(--gray-200)', borderRadius: 14, padding: 14, background: 'white' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Badge variant="blue">Câu {index + 1}</Badge>
+                    <select className="form-select" style={{ width: 240 }} value={question.questionType} onChange={(e) => changeQuestionType(index, e.target.value)}>
+                      {QUESTION_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                     </select>
                   </div>
+                  <button className="btn btn-danger btn-sm" onClick={() => removeQuestion(index)} disabled={form.questions.length === 1}><Trash2 size={12} /> Xoá</button>
                 </div>
-              )}
 
-              {question.questionType === 'essay' && (
-                <div className="alert alert-info" style={{ marginTop: 10 }}>
-                  Câu tự luận không cần chọn đáp án đúng. Giáo viên sẽ chấm thủ công sau khi học viên nộp bài.
+                <div className="grid-2">
+                  <div className="form-group" style={{ gridColumn: '1/-1' }}>
+                    <label className="form-label">Nội dung câu hỏi</label>
+                    <textarea className="form-textarea" rows={3} value={question.questionText} onChange={(e) => setQuestion(index, { questionText: e.target.value })} placeholder="Nhập câu hỏi, yêu cầu làm bài hoặc đề bài" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Ghi chú / gợi ý</label>
+                    <input className="form-input" value={question.helpText} onChange={(e) => setQuestion(index, { helpText: e.target.value })} placeholder="Gợi ý nếu cần" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Điểm</label>
+                    <input type="number" className="form-input" value={question.score} onChange={(e) => setQuestion(index, { score: Number(e.target.value) })} />
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {question.questionType === 'multiple_choice_4' && (
+                  <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                    {question.options.map((option, optionIndex) => (
+                      <div key={option.label} style={{ display: 'grid', gridTemplateColumns: '40px 1fr auto', gap: 8, alignItems: 'center' }}>
+                        <div style={{ fontWeight: 700 }}>{option.label}</div>
+                        <input className="form-input" value={option.text} onChange={(e) => updateOption(index, optionIndex, { text: e.target.value })} placeholder={`Đáp án ${option.label}`} />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                          <input type="radio" name={`correct-${index}`} checked={question.correctAnswer === option.label} onChange={() => setQuestion(index, { correctAnswer: option.label })} />
+                          Đúng
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {question.questionType === 'true_false' && (
+                  <div className="grid-2" style={{ marginTop: 10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Đáp án đúng</label>
+                      <select className="form-select" value={question.correctAnswer} onChange={(e) => setQuestion(index, { correctAnswer: e.target.value })}>
+                        <option value="true">Đúng</option>
+                        <option value="false">Sai</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {question.questionType === 'essay' && (
+                  <div className="alert alert-info" style={{ marginTop: 10 }}>
+                    Câu tự luận không cần chọn đáp án đúng. Giáo viên sẽ chấm thủ công sau khi học viên nộp bài.
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {tab === 'config' && (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <label className="toggle-row" style={{ cursor: 'pointer' }}>
+            <div className="toggle-row-text">
+              <div className="toggle-row-title">Cho phép nộp muộn</div>
+              <div className="toggle-row-desc">
+                {form.allowLateSubmission
+                  ? 'Bật: học viên vẫn nộp được bài sau khi quá hạn nộp.'
+                  : 'Tắt: học viên không thể nộp bài sau khi quá hạn.'}
+              </div>
+            </div>
+            <span className="toggle-switch">
+              <input type="checkbox" checked={!!form.allowLateSubmission} onChange={(e) => setForm((prev: any) => ({ ...prev, allowLateSubmission: e.target.checked }))} />
+              <span className="toggle-track" />
+            </span>
+          </label>
+
+          <div className="toggle-row">
+            <div className="toggle-row-text">
+              <div className="toggle-row-title">Cho phép học viên xem đáp án sau khi nộp bài</div>
+              <div className="toggle-row-desc">
+                {form.showAnswersAfterSubmit
+                  ? 'Bật: ngay sau khi nộp, học viên sẽ thấy đáp án đúng và biết câu nào đúng/sai.'
+                  : 'Tắt: học viên không thấy đáp án đúng và không biết câu nào đúng/sai.'}
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={!!form.showAnswersAfterSubmit}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, showAnswersAfterSubmit: e.target.checked }))}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
+
+          <div className="toggle-row">
+            <div className="toggle-row-text">
+              <div className="toggle-row-title">Cho phép học viên xem điểm sau khi nộp bài</div>
+              <div className="toggle-row-desc">
+                {form.showScoreAfterSubmit
+                  ? 'Bật: học viên thấy điểm tổng và nhận xét ngay sau khi nộp/được chấm.'
+                  : 'Tắt: học viên chỉ biết bài đã nộp/đã chấm, không thấy điểm số hay nhận xét.'}
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={!!form.showScoreAfterSubmit}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, showScoreAfterSubmit: e.target.checked }))}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {tab === 'security' && (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div className="toggle-row">
+            <div className="toggle-row-text">
+              <div className="toggle-row-title">Yêu cầu mật khẩu để làm bài</div>
+              <div className="toggle-row-desc">
+                {form.requirePassword
+                  ? 'Bật: học viên phải nhập đúng mật khẩu mới mở được đề bài (hữu ích khi thi tại lớp, tránh làm bài từ xa).'
+                  : 'Tắt: học viên mở bài tập bình thường, không cần mật khẩu.'}
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={!!form.requirePassword}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, requirePassword: e.target.checked }))}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
+
+          {form.requirePassword && (
+            <div className="form-group">
+              <label className="form-label">
+                Mật khẩu bài tập {(initial?.require_password || initial?.requirePassword) ? '' : <span className="required">*</span>}
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                value={form.password}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, password: e.target.value }))}
+                placeholder={(initial?.require_password || initial?.requirePassword) ? 'Để trống nếu không muốn đổi mật khẩu' : 'Nhập mật khẩu học viên sẽ dùng'}
+              />
+              <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 6 }}>
+                Đọc mật khẩu này cho học viên trước giờ làm bài. Giáo viên/Admin luôn xem được đề mà không cần mật khẩu.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </Modal>
   );
 }
@@ -682,6 +792,9 @@ export default function HomeworkAssignmentsPage() {
                             <Badge variant="blue"><CheckCircle2 size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện điểm</Badge>
                           ) : (
                             <Badge variant="gray"><XCircle size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ẩn điểm</Badge>
+                          )}
+                          {(row.requirePassword || row.require_password) && (
+                            <Badge variant="orange"><Lock size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Có mật khẩu</Badge>
                           )}
                         </div>
                       )}

@@ -19,11 +19,13 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+const NON_AUTH_ERROR_CODES = ['PASSWORD_REQUIRED', 'INVALID_PASSWORD'];
 
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const code = err.response?.data?.code;
+    if (err.response?.status === 401 && !NON_AUTH_ERROR_CODES.includes(code)) {
       const tenant = localStorage.getItem('tenantSlug') || DEFAULT_TENANT_SLUG;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -182,7 +184,7 @@ export const mockExamsApi = {
 
 export const homeworkApi = {
   getAll: (params?: object) => api.get('/homework-assignments', { params }),
-  getById: (id: number) => api.get(`/homework-assignments/${id}`),
+  getById: (id: number, password?: string) => api.get(`/homework-assignments/${id}`, { params: password ? { password } : undefined }),
   create: (data: object) => api.post('/homework-assignments', data),
   update: (id: number, data: object) => api.put(`/homework-assignments/${id}`, data),
   delete: (id: number) => api.delete(`/homework-assignments/${id}`),

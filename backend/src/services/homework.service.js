@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const bcrypt = require('bcryptjs');
 
 function toInt(value, fallback) {
   const parsed = parseInt(value, 10);
@@ -47,8 +48,10 @@ function camelQuestion(row) {
 }
 
 function camelAssignment(row) {
-  return row ? {
-    ...row,
+  if (!row) return row;
+  const { password_hash, ...safeRow } = row;
+  return {
+    ...safeRow,
     classId: row.class_id,
     className: row.class_name,
     dueDate: row.due_date,
@@ -56,6 +59,7 @@ function camelAssignment(row) {
     totalScore: row.total_score,
     showAnswersAfterSubmit: row.show_answers_after_submit,
     showScoreAfterSubmit: row.show_score_after_submit,
+    requirePassword: row.require_password,
     questionCount: Number(row.question_count || 0),
     studentCount: Number(row.student_count || 0),
     submittedCount: Number(row.submitted_count || 0),
@@ -64,7 +68,7 @@ function camelAssignment(row) {
     myTotalScore: row.my_total_score,
     mySubmittedAt: row.my_submitted_at,
     myFeedback: row.my_feedback,
-  } : row;
+  };
 }
 
 function camelStudent(row) {
@@ -222,7 +226,7 @@ class HomeworkService {
     };
   }
 
-  async getAssignment(tenantId, id, user = null) {
+  async getAssignment(tenantId, id, user = null, password = null) {
     if (isStudentOnly(user)) await ensureStudentHomeworkAssignments(tenantId, user.id);
     const assignmentResult = await pool.query(
       `SELECT a.*, c.name AS class_name
@@ -250,6 +254,22 @@ class HomeworkService {
       );
       if (!allowed.rows.length) return null;
       if (assignment.status === 'draft') return null;
+
+      if (assignment.require_password) {
+        if (!password) {
+          const err = new Error('Bài tập này yêu cầu mật khẩu để làm bài');
+          err.status = 423;
+          err.code = 'PASSWORD_REQUIRED';
+          throw err;
+        }
+        const match = await bcrypt.compare(String(password), assignment.password_hash || '');
+        if (!match) {
+          const err = new Error('Sai mật khẩu bài tập');
+          err.status = 423;
+          err.code = 'INVALID_PASSWORD';
+          throw err;
+        }
+      }
     }
 
     const questionsResult = await pool.query(
@@ -329,10 +349,16 @@ class HomeworkService {
         if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
       }
 
+      const requirePassword = !!data.requirePassword;
+      if (requirePassword && !String(data.password || '').trim()) {
+        throw Object.assign(new Error('Vui lòng nhập mật khẩu cho bài tập'), { status: 400 });
+      }
+      const passwordHash = requirePassword ? await bcrypt.hash(String(data.password).trim(), 10) : null;
+
       const assignmentResult = await client.query(
         `INSERT INTO homework_assignments
-         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
+         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
          RETURNING *`,
         [
           tenantId,
@@ -346,6 +372,8 @@ class HomeworkService {
           data.status || 'draft',
           !!data.showAnswersAfterSubmit,
           data.showScoreAfterSubmit !== undefined ? !!data.showScoreAfterSubmit : true,
+          requirePassword,
+          passwordHash,
           user?.id || null,
         ]
       );
@@ -385,6 +413,19 @@ class HomeworkService {
         if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
       }
 
+      const requirePassword = data.requirePassword !== undefined ? !!data.requirePassword : current.rows[0].require_password;
+      let passwordHash = current.rows[0].password_hash;
+      if (requirePassword) {
+        const newPassword = String(data.password || '').trim();
+        if (newPassword) {
+          passwordHash = await bcrypt.hash(newPassword, 10);
+        } else if (!passwordHash) {
+          throw Object.assign(new Error('Vui lòng nhập mật khẩu cho bài tập'), { status: 400 });
+        }
+      } else {
+        passwordHash = null;
+      }
+
       const assignmentResult = await client.query(
         `UPDATE homework_assignments
          SET class_id=$1,
@@ -397,8 +438,10 @@ class HomeworkService {
              status=$8,
              show_answers_after_submit=$9,
              show_score_after_submit=$10,
-             updated_by=$11, updated_at=NOW()
-         WHERE id=$12 AND tenant_id=$13
+             require_password=$11,
+             password_hash=$12,
+             updated_by=$13, updated_at=NOW()
+         WHERE id=$14 AND tenant_id=$15
          RETURNING *`,
         [
           data.classId || current.rows[0].class_id,
@@ -411,6 +454,8 @@ class HomeworkService {
           data.status || current.rows[0].status,
           data.showAnswersAfterSubmit !== undefined ? !!data.showAnswersAfterSubmit : current.rows[0].show_answers_after_submit,
           data.showScoreAfterSubmit !== undefined ? !!data.showScoreAfterSubmit : current.rows[0].show_score_after_submit,
+          requirePassword,
+          passwordHash,
           user?.id || null,
           id,
           tenantId,
@@ -465,6 +510,13 @@ class HomeworkService {
       if (assignment.status !== 'active') throw Object.assign(new Error('Bài tập chưa mở hoặc đã đóng'), { status: 400 });
       if (assignment.due_date && !assignment.allow_late_submission && new Date() > new Date(assignment.due_date)) {
         throw Object.assign(new Error('Đã hết hạn nộp bài'), { status: 400 });
+      }
+
+      if (assignment.require_password) {
+        const provided = payload?.password;
+        if (!provided || !(await bcrypt.compare(String(provided), assignment.password_hash || ''))) {
+          throw Object.assign(new Error('Sai mật khẩu bài tập'), { status: 423, code: 'INVALID_PASSWORD' });
+        }
       }
 
       const assignmentStudentResult = await client.query(
