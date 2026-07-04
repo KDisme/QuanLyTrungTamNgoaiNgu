@@ -9,7 +9,7 @@ const statements = [
     title VARCHAR(255) NOT NULL,
     description TEXT,
     instructions TEXT,
-    due_date TIMESTAMP NULL,
+    due_date TIMESTAMPTZ NULL,
     allow_late_submission BOOLEAN NOT NULL DEFAULT FALSE,
     total_score NUMERIC(10,2) NOT NULL DEFAULT 100,
     status VARCHAR(30) NOT NULL DEFAULT 'draft',
@@ -28,6 +28,7 @@ const statements = [
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS require_password BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER`,
+  `ALTER TABLE homework_assignments ALTER COLUMN due_date TYPE TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_status ON homework_assignments(tenant_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_class ON homework_assignments(tenant_id, class_id)`,
   `CREATE TABLE IF NOT EXISTS homework_assignment_questions (

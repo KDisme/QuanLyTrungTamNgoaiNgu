@@ -8,6 +8,19 @@ import { Badge, EmptyState, Loading, StatusBadge } from '../../components/common
 type AnswerState = Record<number, { answerText?: string; selectedAnswer?: string }>;
 type ResultState = Record<number, { isCorrect?: boolean; score?: number }>;
 
+function formatDateTime(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '-';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '-';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
 function ProgressRing({ percent }: { percent: number }) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
@@ -47,6 +60,9 @@ export default function HomeworkTakePage() {
   const [timeUp, setTimeUp] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const autoSubmittedRef = useRef(false);
+
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastDraftSavedTime, setLastDraftSavedTime] = useState<string | null>(null);
 
   const load = async (password?: string) => {
     setLoading(true);
@@ -106,6 +122,67 @@ export default function HomeworkTakePage() {
   const myStatus = detail?.mySubmission?.submissionStatus || detail?.mySubmission?.myStatus || detail?.myStatus || detail?.status;
   const canEdit = !['submitted', 'graded'].includes(String(myStatus || '').toLowerCase());
   const isLocked = !canEdit;
+
+  const saveDraft = async (silent = false) => {
+    if (!canEdit) return;
+    const payloadAnswers = questions.map((question: any) => {
+      const answer = answers[Number(question.id)] || {};
+      if (question.questionType === 'essay') {
+        return { questionId: question.id, answerText: answer.answerText || '' };
+      }
+      return { questionId: question.id, selectedAnswer: answer.selectedAnswer || '' };
+    });
+
+    if (!silent) setDraftStatus('saving');
+    try {
+      await homeworkApi.submit(assignmentId, {
+        answers: payloadAnswers,
+        password: verifiedPassword,
+        isDraft: true,
+      });
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      setLastDraftSavedTime(timeStr);
+      if (!silent) {
+        setDraftStatus('saved');
+        toast.success('Đã lưu bản nháp thành công');
+      }
+    } catch (err) {
+      if (!silent) {
+        setDraftStatus('error');
+        toast.error('Không thể lưu bản nháp');
+      }
+    }
+  };
+
+  const answersRef = useRef(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    if (!canEdit || loading || !detail) return;
+    const timer = setInterval(() => {
+      const payloadAnswers = questions.map((question: any) => {
+        const answer = answersRef.current[Number(question.id)] || {};
+        if (question.questionType === 'essay') {
+          return { questionId: question.id, answerText: answer.answerText || '' };
+        }
+        return { questionId: question.id, selectedAnswer: answer.selectedAnswer || '' };
+      });
+      homeworkApi.submit(assignmentId, {
+        answers: payloadAnswers,
+        password: verifiedPassword,
+        isDraft: true,
+      }).then(() => {
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        setLastDraftSavedTime(timeStr);
+      }).catch(() => {});
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [canEdit, loading, detail, verifiedPassword, questions]);
+
   // Backend already strips correctAnswer / per-question score when reveal isn't allowed,
   // so the presence of a correctAnswer or a scored result is itself the signal to trust here.
   const canRevealAnswers = !!detail?.canRevealAnswers;
@@ -224,7 +301,7 @@ export default function HomeworkTakePage() {
     return !!String(current.selectedAnswer || '').trim();
   }).length;
   const completionRate = totalQuestions ? Math.round((answeredCount / totalQuestions) * 100) : 0;
-  const deadlineText = detail.dueDate ? new Date(detail.dueDate).toLocaleString('vi-VN') : 'Không có hạn nộp';
+  const deadlineText = detail.dueDate ? formatDateTime(detail.dueDate) : 'Không có hạn nộp';
 
   return (
     <div style={{ display: 'grid', gap: 18, maxWidth: 1120, margin: '0 auto', paddingBottom: 88 }}>
@@ -410,8 +487,18 @@ export default function HomeworkTakePage() {
 
       {canEdit && questions.length > 0 && (
         <div style={{ position: 'sticky', bottom: 16, display: 'flex', justifyContent: 'flex-end', paddingTop: 6 }}>
-          <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--gray-200)', borderRadius: 999, padding: 10, boxShadow: '0 12px 30px rgba(15, 23, 42, 0.12)' }}>
-            <button className="btn btn-primary" onClick={() => submit()} disabled={saving} style={{ minWidth: 160 }}><Send size={14} /> {saving ? 'Đang nộp...' : `Nộp bài (${answeredCount}/${totalQuestions})`}</button>
+          <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--gray-200)', borderRadius: 999, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 12px 30px rgba(15, 23, 42, 0.12)' }}>
+            {lastDraftSavedTime && (
+              <span style={{ fontSize: 12, color: 'var(--gray-500)', fontWeight: 600 }}>
+                Tự động lưu: {lastDraftSavedTime}
+              </span>
+            )}
+            <button className="btn btn-secondary" onClick={() => saveDraft(false)} disabled={draftStatus === 'saving' || saving}>
+              {draftStatus === 'saving' ? 'Đang lưu...' : 'Lưu nháp'}
+            </button>
+            <button className="btn btn-primary" onClick={() => submit()} disabled={saving || draftStatus === 'saving'} style={{ minWidth: 160 }}>
+              <Send size={14} /> {saving ? 'Đang nộp...' : `Nộp bài (${answeredCount}/${totalQuestions})`}
+            </button>
           </div>
         </div>
       )}

@@ -43,6 +43,32 @@ function createQuestion(type = 'multiple_choice_4', orderNumber = 1): HomeworkQu
   };
 }
 
+function toLocalISOString(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function formatDateTime(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '-';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '-';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
 function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose: () => void; onSuccess: () => void }) {
   const [classes, setClasses] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
@@ -52,7 +78,7 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     description: initial?.description || '',
     instructions: initial?.instructions || '',
     classId: initial?.class_id || initial?.classId || '',
-    dueDate: initial?.due_date ? String(initial.due_date).slice(0, 16) : '',
+    dueDate: toLocalISOString(initial?.due_date || initial?.dueDate),
     allowLateSubmission: initial?.allow_late_submission ?? initial?.allowLateSubmission ?? false,
     totalScore: initial?.total_score || initial?.totalScore || 100,
     status: initial?.status || 'draft',
@@ -172,6 +198,7 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
         classId: form.classId ? Number(form.classId) : null,
         totalScore: Number(form.totalScore || 100),
         timeLimitMinutes: form.hasTimeLimit ? Number(form.timeLimitMinutes || 30) : null,
+        dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
         questions,
       };
       if (initial) await homeworkApi.update(initial.id, payload);
@@ -488,16 +515,56 @@ function GradeStudentModal({
 }) {
   const questions = detail?.questions || [];
   const submission = student?.submissionId ? student : null;
-  const [scores, setScores] = useState<Record<number, number>>({});
+  const [scores, setScores] = useState<Record<number, string | number>>({});
   const [generalFeedback, setGeneralFeedback] = useState(student?.submissionFeedback || student?.feedback || '');
   const [saving, setSaving] = useState(false);
-  const essayQuestions = questions.filter((question: any) => question.questionType === 'essay');
-  const objectiveQuestions = questions.filter((question: any) => question.questionType !== 'essay');
+
+  const [publishScore, setPublishScore] = useState(!!detail?.showScoreAfterSubmit);
+  const [publishAnswers, setPublishAnswers] = useState(!!detail?.showAnswersAfterSubmit);
+
+  const togglePublishScore = async (checked: boolean) => {
+    setPublishScore(checked);
+    try {
+      await homeworkApi.update(detail.id, {
+        ...detail,
+        showScoreAfterSubmit: checked,
+      });
+      toast.success(checked ? 'Đã công bố điểm cho cả lớp' : 'Đã ẩn điểm với cả lớp');
+      detail.showScoreAfterSubmit = checked;
+      onSuccess();
+    } catch (err) {
+      toast.error('Không cập nhật được cấu hình');
+      setPublishScore(!checked);
+    }
+  };
+
+  const togglePublishAnswers = async (checked: boolean) => {
+    setPublishAnswers(checked);
+    try {
+      await homeworkApi.update(detail.id, {
+        ...detail,
+        showAnswersAfterSubmit: checked,
+      });
+      toast.success(checked ? 'Đã công bố đáp án cho cả lớp' : 'Đã ẩn đáp án với cả lớp');
+      detail.showAnswersAfterSubmit = checked;
+      onSuccess();
+    } catch (err) {
+      toast.error('Không cập nhật được cấu hình');
+      setPublishAnswers(!checked);
+    }
+  };
+  const essayQuestions = useMemo(() => questions.filter((question: any) => question.questionType === 'essay'), [questions]);
+  const objectiveQuestions = useMemo(() => questions.filter((question: any) => question.questionType !== 'essay'), [questions]);
 
   useEffect(() => {
-    const nextScores: Record<number, number> = {};
+    const nextScores: Record<number, string | number> = {};
+    // Chỉ load điểm cho câu tự luận (essay), không copy điểm trắc nghiệm tự động
     (submission?.submissionAnswers || []).forEach((answer: any) => {
-      nextScores[Number(answer.questionId || answer.question_id)] = Number(answer.score || 0);
+      const qId = Number(answer.questionId || answer.question_id);
+      const isEssay = essayQuestions.some((q: any) => Number(q.id) === qId);
+      if (isEssay) {
+        nextScores[qId] = answer.score ?? 0;
+      }
     });
     essayQuestions.forEach((question: any) => {
       if (nextScores[Number(question.id)] === undefined) {
@@ -520,28 +587,33 @@ function GradeStudentModal({
 
   const totalScore = objectiveScore + essayScore;
 
-  const save = async () => {
+  const save = async (requestRevision = false) => {
     if (!submission?.submissionId) return toast.error('Bài này chưa có bài nộp để chấm');
     setSaving(true);
     try {
       const updatedAnswers = questions.map((question: any) => {
         const existing = answersByQuestion.get(Number(question.id)) || {};
+        const isEssay = question.questionType === 'essay';
         return {
           ...existing,
           questionId: question.id,
-          score: Number(scores[Number(question.id)] || 0),
+          // Câu tự luận: lấy điểm giáo viên nhập; câu trắc nghiệm: giữ nguyên điểm tự động
+          score: isEssay
+            ? Number(scores[Number(question.id)] || 0)
+            : Number(existing.score || 0),
         };
       });
       await homeworkApi.grade(submission.submissionId, {
         totalScore,
         feedback: generalFeedback,
         answers: updatedAnswers,
+        requestRevision,
       });
-      toast.success('Đã lưu điểm bài tự luận');
+      toast.success(requestRevision ? 'Đã yêu cầu học viên làm lại bài' : 'Đã lưu điểm bài tự luận');
       onSuccess();
       onClose();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Không lưu được điểm');
+      toast.error(err.response?.data?.message || 'Không lưu được kết quả');
     } finally {
       setSaving(false);
     }
@@ -555,7 +627,14 @@ function GradeStudentModal({
       footer={(
         <>
           <button className="btn btn-secondary" onClick={onClose}>Đóng</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}><Save size={14} /> {saving ? 'Đang lưu...' : 'Lưu điểm'}</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-warning" style={{ background: '#d97706', borderColor: '#d97706', color: 'white' }} onClick={() => save(true)} disabled={saving}>
+              Yêu cầu làm lại
+            </button>
+            <button className="btn btn-primary" onClick={() => save(false)} disabled={saving}>
+              <Save size={14} /> {saving ? 'Đang lưu...' : 'Lưu điểm'}
+            </button>
+          </div>
         </>
       )}
     >
@@ -566,9 +645,27 @@ function GradeStudentModal({
           <div className="stat-card"><div><div className="stat-value">{objectiveScore}</div><div className="stat-label">TRẮC NGHIỆM TỰ ĐỘNG</div></div><ClipboardList color="var(--primary)" /></div>
         </div>
 
+        <div style={{ display: 'flex', gap: 24, padding: 12, background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--gray-700)' }}>CÔNG BỐ BÀI TẬP (CẢ LỚP):</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            <input type="checkbox" checked={publishScore} onChange={(e) => togglePublishScore(e.target.checked)} />
+            Hiện điểm số
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            <input type="checkbox" checked={publishAnswers} onChange={(e) => togglePublishAnswers(e.target.checked)} />
+            Hiện đáp án đúng/sai
+          </label>
+        </div>
+
         <div className="alert alert-info" style={{ marginBottom: 0 }}>
           Trắc nghiệm đã được chấm tự động. Giáo viên chỉ nhập điểm cho phần tự luận, sau đó hệ thống sẽ cộng vào tổng điểm.
         </div>
+
+        {submission?.submissionSubmittedAt && detail?.dueDate && new Date(submission.submissionSubmittedAt) > new Date(detail.dueDate) && (
+          <div className="alert alert-danger" style={{ marginBottom: 0, background: '#fff1f2', color: '#991b1b', borderColor: '#ffe4e6' }}>
+            ⏱️ <strong>Nộp bài muộn:</strong> Học viên nộp bài lúc {formatDateTime(submission.submissionSubmittedAt)} ({getLateDurationText(submission.submissionSubmittedAt, detail.dueDate)}).
+          </div>
+        )}
 
         <div style={{ display: 'grid', gap: 12 }}>
           {questions.map((question: any, index: number) => {
@@ -597,8 +694,8 @@ function GradeStudentModal({
                         max={maxScore}
                         step="0.5"
                         className="form-input"
-                        value={scores[Number(question.id)] ?? 0}
-                        onChange={(e) => setScores((prev) => ({ ...prev, [Number(question.id)]: Number(e.target.value) }))}
+                        value={scores[Number(question.id)] ?? ''}
+                        onChange={(e) => setScores((prev) => ({ ...prev, [Number(question.id)]: e.target.value }))}
                       />
                     </div>
                     <div className="form-group">
@@ -681,10 +778,27 @@ function HomeworkDetailModal({
                     </td>
                     <td><StatusBadge status={student.submissionStatus || student.submission_status || student.myStatus || student.status} /></td>
                     <td>{student.submissionTotalScore ?? student.total_score ?? '-'}</td>
-                    <td>{student.submissionSubmittedAt || student.submitted_at ? new Date(student.submissionSubmittedAt || student.submitted_at).toLocaleString('vi-VN') : '-'}</td>
+                    <td>
+                      {student.submissionSubmittedAt || student.submitted_at ? (
+                        <>
+                          <div>{formatDateTime(student.submissionSubmittedAt || student.submitted_at)}</div>
+                          {detail?.dueDate && new Date(student.submissionSubmittedAt || student.submitted_at) > new Date(detail.dueDate) && (
+                            <div style={{ color: 'var(--danger)', fontSize: 11, fontWeight: 600, marginTop: 2 }}>
+                              ({getLateDurationText(student.submissionSubmittedAt || student.submitted_at, detail.dueDate)})
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
                     <td>
                       {student.submissionId ? (
-                        <button className="btn btn-primary btn-sm" onClick={() => setGradingStudent(student)}><FileCheck2 size={12} /> Chấm bài</button>
+                        (student.submissionStatus || student.submission_status) === 'graded' ? (
+                          <button className="btn btn-secondary btn-sm" onClick={() => setGradingStudent(student)}><FileCheck2 size={12} /> Xem bài</button>
+                        ) : (
+                          <button className="btn btn-primary btn-sm" onClick={() => setGradingStudent(student)}><FileCheck2 size={12} /> Chấm bài</button>
+                        )
                       ) : (
                         <span style={{ color: 'var(--gray-500)', fontSize: 13 }}>Chưa nộp</span>
                       )}
@@ -704,13 +818,129 @@ function HomeworkDetailModal({
 
 function HomeworkSubmitButton({ row, tenantSlug, navigate }: { row: any; tenantSlug: string; navigate: ReturnType<typeof useNavigate> }) {
   const assignmentStatus = row.my_status || row.myStatus || row.status;
-  const label = assignmentStatus === 'graded' || assignmentStatus === 'submitted' ? 'Xem bài' : 'Làm bài';
-  return <button className="btn btn-primary btn-sm" onClick={() => navigate(`/${tenantSlug}/student/homework/${row.id}/take`)}>{label}</button>;
+  const isViewOnly = assignmentStatus === 'graded' || assignmentStatus === 'submitted';
+  const label = isViewOnly ? 'Xem bài' : 'Làm bài';
+  
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleClick = () => {
+    const timeLimit = Number(row.timeLimitMinutes || row.time_limit_minutes || 0);
+    const hasStarted = !!(row.myStartedAt || row.my_started_at);
+    
+    if (timeLimit > 0 && !hasStarted && !isViewOnly) {
+      setShowConfirm(true);
+    } else {
+      navigate(`/${tenantSlug}/student/homework/${row.id}/take`);
+    }
+  };
+
+  return (
+    <>
+      <button className="btn btn-primary btn-sm" onClick={handleClick}>{label}</button>
+
+      {showConfirm && (
+        <Modal
+          title="⏱️ Xác nhận bắt đầu làm bài"
+          size="md"
+          onClose={() => setShowConfirm(false)}
+          footer={(
+            <>
+              <button className="btn btn-secondary" onClick={() => setShowConfirm(false)}>Hủy</button>
+              <button className="btn btn-primary" onClick={() => {
+                setShowConfirm(false);
+                navigate(`/${tenantSlug}/student/homework/${row.id}/take`);
+              }}>Bắt đầu làm bài</button>
+            </>
+          )}
+        >
+          <div style={{ display: 'grid', gap: 14, padding: '10px 0' }}>
+            <div style={{ fontSize: 15, lineHeight: 1.6 }}>
+              Bài tập này có giới hạn thời gian làm bài là <strong style={{ color: 'var(--primary)', fontSize: 17 }}>{row.timeLimitMinutes || row.time_limit_minutes} phút</strong>.
+            </div>
+            <div style={{ fontSize: 14, color: '#991b1b', background: '#fff1f2', border: '1px solid #ffe4e6', borderRadius: 8, padding: 12, lineHeight: 1.5 }}>
+              ⚠️ <strong>Lưu ý quan trọng:</strong> Khi bạn nhấn bắt đầu, đồng hồ đếm ngược sẽ chạy liên tục và <strong>không thể tạm dừng hoặc đặt lại</strong>, kể cả khi bạn đóng tab trình duyệt hay thoát ra ngoài. Hãy chắc chắn bạn đã chuẩn bị sẵn sàng và có kết nối mạng ổn định!
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function getLateDurationText(submittedAt: any, dueDate: any) {
+  if (!submittedAt || !dueDate) return '';
+  const diffMs = new Date(submittedAt).getTime() - new Date(dueDate).getTime();
+  if (diffMs <= 0) return '';
+  
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 60) {
+    return `muộn ${diffMinutes} phút`;
+  }
+  
+  const diffHours = Math.floor(diffMinutes / 60);
+  const remainingMinutes = diffMinutes % 60;
+  if (diffHours < 24) {
+    return `muộn ${diffHours} giờ ${remainingMinutes > 0 ? `${remainingMinutes} phút` : ''}`;
+  }
+  
+  const diffDays = Math.floor(diffHours / 24);
+  const remainingHours = diffHours % 24;
+  return `muộn ${diffDays} ngày ${remainingHours > 0 ? `${remainingHours} giờ` : ''}`;
 }
 
 function getDisplayStatus(row: any, isStudentView: boolean) {
-  if (isStudentView) return row.my_status || row.myStatus || row.status;
+  if (row.status === 'active') {
+    const dueDate = row.dueDate || row.due_date;
+    const allowLate = row.allowLateSubmission || row.allow_late_submission;
+    if (dueDate && new Date() > new Date(dueDate) && !allowLate) {
+      return 'closed';
+    }
+  }
   return row.status;
+}
+
+function getStudentHomeworkStatus(row: any) {
+  const myStatus = row.myStatus || row.my_status;
+  const mySubmittedAt = row.mySubmittedAt || row.my_submitted_at;
+  const myStartedAt = row.myStartedAt || row.my_started_at;
+  const dueDate = row.dueDate || row.due_date;
+  const allowLate = row.allowLateSubmission || row.allow_late_submission;
+
+  if (mySubmittedAt || ['submitted', 'graded'].includes(String(myStatus || '').toLowerCase())) {
+    if (myStatus === 'graded') {
+      return 'graded'; // Đã chấm
+    }
+    if (dueDate && new Date(mySubmittedAt || Date.now()) > new Date(dueDate)) {
+      return 'submitted_late'; // Nộp muộn
+    }
+    return 'submitted'; // Đang chờ chấm
+  }
+
+  // Chưa nộp
+  const now = new Date();
+  if (dueDate && now > new Date(dueDate)) {
+    if (allowLate) {
+      return myStartedAt || myStatus === 'in_progress' ? 'in_progress' : 'assigned';
+    }
+    return 'missed'; // Quá hạn
+  }
+
+  if (myStatus === 'revision_required') {
+    return 'revision_required'; // Cần làm lại
+  }
+
+  return myStartedAt || myStatus === 'in_progress' ? 'in_progress' : 'assigned';
+}
+
+function getStudentHomeworkTab(row: any): 'todo' | 'submitted' | 'history' {
+  const status = getStudentHomeworkStatus(row);
+  if (['assigned', 'in_progress', 'revision_required'].includes(status)) {
+    return 'todo';
+  }
+  if (['submitted', 'submitted_late'].includes(status)) {
+    return 'submitted';
+  }
+  return 'history'; // 'graded', 'missed'
 }
 
 export default function HomeworkAssignmentsPage() {
@@ -729,6 +959,12 @@ export default function HomeworkAssignmentsPage() {
   const [editing, setEditing] = useState<any>(null);
   const [gradingDetail, setGradingDetail] = useState<any>(null);
   const [deleting, setDeleting] = useState<any>(null);
+  const [studentTab, setStudentTab] = useState<'todo' | 'submitted' | 'history'>('todo');
+
+  const displayedRows = useMemo(() => {
+    if (canManage) return rows;
+    return rows.filter((row) => getStudentHomeworkTab(row) === studentTab);
+  }, [rows, canManage, studentTab]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -753,6 +989,19 @@ export default function HomeworkAssignmentsPage() {
     setGradingDetail(res.data);
   };
 
+  const reloadGradingDetail = useCallback(async () => {
+    // Reload cả danh sách lẫn detail đang mở để cập nhật điểm học viên mới nhất
+    load();
+    if (gradingDetail?.id) {
+      try {
+        const res = await homeworkApi.getById(gradingDetail.id);
+        setGradingDetail(res.data);
+      } catch {
+        // ignore—giữ nguyên detail cũ nếu lỗi
+      }
+    }
+  }, [load, gradingDetail?.id]);
+
   const del = async () => {
     await homeworkApi.delete(deleting.id);
     toast.success('Đã xoá bài tập');
@@ -776,23 +1025,47 @@ export default function HomeworkAssignmentsPage() {
         {canManage && <button className="btn btn-primary" onClick={() => setShowAdd(true)}><Plus size={15} /> Tạo bài tập</button>}
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card"><div><div className="stat-value">{total}</div><div className="stat-label">BÀI TẬP</div></div><BookOpen color="var(--primary)" /></div>
-        <div className="stat-card"><div><div className="stat-value">{stat.active || 0}</div><div className="stat-label">ĐANG MỞ</div></div><ClipboardList color="var(--primary)" /></div>
-        <div className="stat-card"><div><div className="stat-value">{stat.graded || 0}</div><div className="stat-label">ĐÃ CHẤM</div></div><Calendar color="var(--primary)" /></div>
-      </div>
+      {canManage && (
+        <div className="stats-grid">
+          <div className="stat-card"><div><div className="stat-value">{total}</div><div className="stat-label">BÀI TẬP</div></div><BookOpen color="var(--primary)" /></div>
+          <div className="stat-card"><div><div className="stat-value">{stat.active || 0}</div><div className="stat-label">ĐANG MỞ</div></div><ClipboardList color="var(--primary)" /></div>
+          <div className="stat-card"><div><div className="stat-value">{stat.closed || 0}</div><div className="stat-label">ĐÃ ĐÓNG</div></div><Calendar color="var(--primary)" /></div>
+        </div>
+      )}
+
+      {!canManage && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 18, borderBottom: '2px solid var(--gray-100)' }}>
+          {[
+            { id: 'todo', label: 'Cần làm' },
+            { id: 'submitted', label: 'Đã nộp' },
+            { id: 'history', label: 'Lịch sử' },
+          ].map((t) => (
+            <button key={t.id} onClick={() => setStudentTab(t.id as any)}
+              style={{
+                padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: 700, fontFamily: 'var(--font)',
+                color: studentTab === t.id ? 'var(--primary)' : 'var(--gray-500)',
+                borderBottom: `2px solid ${studentTab === t.id ? 'var(--primary)' : 'transparent'}`,
+                marginBottom: -2,
+                transition: 'all 0.15s ease',
+              }}>{t.label}</button>
+          ))}
+        </div>
+      )}
 
       <div className="filter-bar">
         <div className="search-input">
           <Search className="search-icon" size={14} />
           <input className="form-input" placeholder="Tìm tiêu đề, mô tả..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <select className="form-select" style={{ width: 180 }} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Tất cả trạng thái</option>
-          <option value="draft">Nháp</option>
-          <option value="active">Đang mở</option>
-          <option value="closed">Đã đóng</option>
-        </select>
+        {canManage && (
+          <select className="form-select" style={{ width: 180 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Tất cả trạng thái</option>
+            <option value="draft">Nháp</option>
+            <option value="active">Đang mở</option>
+            <option value="closed">Đã đóng</option>
+          </select>
+        )}
       </div>
 
       {loading ? <Loading /> : (
@@ -805,44 +1078,64 @@ export default function HomeworkAssignmentsPage() {
                 <th>Câu hỏi</th>
                 <th>Hạn nộp</th>
                 <th>Trạng thái</th>
-                {!canManage && <th>Trạng thái của bạn</th>}
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? <tr><td colSpan={canManage ? 6 : 7}><EmptyState message="Chưa có bài tập về nhà" /></td></tr> : rows.map((row) => {
-                const myStatus = row.my_status || row.myStatus;
+              {displayedRows.length === 0 ? <tr><td colSpan={6}><EmptyState message="Chưa có bài tập về nhà" /></td></tr> : displayedRows.map((row) => {
                 return (
                   <tr key={row.id}>
                     <td>
                       <b>{row.title}</b>
                       <div style={{ color: 'var(--gray-500)', fontSize: 12 }}>{row.description}</div>
-                      {canManage && (
-                        <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          {(row.showAnswersAfterSubmit || row.show_answers_after_submit) ? (
-                            <Badge variant="green"><Eye size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện đáp án</Badge>
-                          ) : (
-                            <Badge variant="gray"><EyeOff size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ẩn đáp án</Badge>
-                          )}
-                          {(row.showScoreAfterSubmit ?? row.show_score_after_submit ?? true) ? (
-                            <Badge variant="blue"><CheckCircle2 size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện điểm</Badge>
-                          ) : (
-                            <Badge variant="gray"><XCircle size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ẩn điểm</Badge>
-                          )}
-                          {(row.requirePassword || row.require_password) && (
-                            <Badge variant="orange"><Lock size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Có mật khẩu</Badge>
-                          )}
-                          {(row.timeLimitMinutes || row.time_limit_minutes) && (
-                            <Badge variant="purple"><Timer size={11} style={{ marginRight: 4, verticalAlign: -1 }} />{row.timeLimitMinutes || row.time_limit_minutes} phút</Badge>
-                          )}
+                      
+                      <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {!canManage && row.myAssignedAt && (new Date().getTime() - new Date(row.myAssignedAt).getTime()) < 24 * 60 * 60 * 1000 && (
+                          <Badge variant="green">Mới</Badge>
+                        )}
+                        
+                        {!canManage && !row.mySubmittedAt && row.dueDate && (new Date(row.dueDate).getTime() - new Date().getTime()) > 0 && (new Date(row.dueDate).getTime() - new Date().getTime()) < 24 * 60 * 60 * 1000 && (
+                          <Badge variant="red">Sắp đến hạn</Badge>
+                        )}
+
+                        {canManage && ((row.showAnswersAfterSubmit || row.show_answers_after_submit) ? (
+                          <Badge variant="green"><Eye size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện đáp án</Badge>
+                        ) : (
+                          <Badge variant="gray"><EyeOff size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ẩn đáp án</Badge>
+                        ))}
+                        {canManage && ((row.showScoreAfterSubmit ?? row.show_score_after_submit ?? true) ? (
+                          <Badge variant="blue"><CheckCircle2 size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Hiện điểm</Badge>
+                        ) : (
+                          <Badge variant="gray"><XCircle size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ẩn điểm</Badge>
+                        ))}
+                        {canManage && (row.requirePassword || row.require_password) && (
+                          <Badge variant="orange"><Lock size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Có mật khẩu</Badge>
+                        )}
+                        {canManage && (row.timeLimitMinutes || row.time_limit_minutes) && (
+                          <Badge variant="purple"><Timer size={11} style={{ marginRight: 4, verticalAlign: -1 }} />{row.timeLimitMinutes || row.time_limit_minutes} phút</Badge>
+                        )}
+                        {(row.allowLateSubmission || row.allow_late_submission) && (
+                          <Badge variant="yellow"><Calendar size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Cho phép nộp muộn</Badge>
+                        )}
+                      </div>
+
+                      {!canManage && (row.myStatus || row.my_status) === 'revision_required' && (row.myFeedback || row.feedback) && (
+                        <div style={{ color: '#d97706', fontSize: 12, marginTop: 6, fontWeight: 700, background: '#fffbeb', border: '1px dashed #fef3c7', borderRadius: 8, padding: '6px 10px', display: 'inline-block' }}>
+                          ✍️ Giáo viên yêu cầu làm lại: "{row.myFeedback || row.feedback}"
                         </div>
                       )}
                     </td>
                     <td>{row.class_name || row.className || 'Chưa gán lớp'}</td>
                     <td>{row.question_count || row.questionCount || 0}</td>
-                    <td>{row.due_date || row.dueDate ? String(row.due_date || row.dueDate).slice(0, 16).replace('T', ' ') : '-'}</td>
-                    <td><StatusBadge status={getDisplayStatus(row, !canManage)} /></td>
-                    {!canManage && <td>{myStatus ? <StatusBadge status={myStatus} /> : <Badge variant="gray">Chưa được giao</Badge>}</td>}
+                    <td>{row.due_date || row.dueDate ? formatDateTime(row.due_date || row.dueDate) : '-'}</td>
+                    <td>
+                      <StatusBadge status={canManage ? getDisplayStatus(row, false) : getStudentHomeworkStatus(row)} />
+                      {!canManage && ['submitted', 'graded'].includes(String(row.myStatus || '').toLowerCase()) && row.mySubmittedAt && row.dueDate && new Date(row.mySubmittedAt) > new Date(row.dueDate) && (
+                        <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                          ({getLateDurationText(row.mySubmittedAt, row.dueDate)})
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                         {!canManage && <HomeworkSubmitButton row={row} tenantSlug={tenantSlug || ''} navigate={navigate} />}
@@ -862,7 +1155,7 @@ export default function HomeworkAssignmentsPage() {
 
       {showAdd && <HomeworkForm onClose={() => setShowAdd(false)} onSuccess={load} />}
       {editing && <HomeworkForm initial={editing} onClose={() => setEditing(null)} onSuccess={load} />}
-      {gradingDetail && <HomeworkDetailModal detail={gradingDetail} onClose={() => setGradingDetail(null)} onSuccess={load} />}
+      {gradingDetail && <HomeworkDetailModal detail={gradingDetail} onClose={() => setGradingDetail(null)} onSuccess={reloadGradingDetail} />}
       {deleting && <ConfirmDialog message="Xoá bài tập này?" onCancel={() => setDeleting(null)} onConfirm={del} />}
     </div>
   );

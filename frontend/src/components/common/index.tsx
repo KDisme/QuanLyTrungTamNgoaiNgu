@@ -76,7 +76,7 @@ export function Avatar({ name, size = 36 }: AvatarProps) {
 
 // ---- STATUS BADGE ----
 const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
-  active: { label: 'Đang mở / hoạt động', variant: 'green' },
+  active: { label: 'Đang mở', variant: 'green' },
   inactive: { label: 'Không hoạt động', variant: 'gray' },
   upcoming: { label: 'Sắp diễn ra', variant: 'yellow' },
   closed: { label: 'Đã đóng', variant: 'gray' },
@@ -98,6 +98,9 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   submitted: { label: 'Đã nộp', variant: 'green' },
   graded: { label: 'Đã chấm', variant: 'purple' },
   suspended: { label: 'Tạm dừng', variant: 'orange' },
+  revision_required: { label: 'Cần làm lại', variant: 'orange' },
+  submitted_late: { label: 'Nộp muộn', variant: 'red' },
+  missed: { label: 'Quá hạn', variant: 'red' },
   dropped: { label: 'Bỏ học', variant: 'red' },
 };
 

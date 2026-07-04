@@ -69,6 +69,8 @@ function camelAssignment(row) {
     myTotalScore: row.my_total_score,
     mySubmittedAt: row.my_submitted_at,
     myFeedback: row.my_feedback,
+    myStartedAt: row.my_started_at,
+    myAssignedAt: row.my_assigned_at,
   };
 }
 
@@ -191,7 +193,7 @@ class HomeworkService {
       ? `LEFT JOIN homework_assignment_students my_asg ON my_asg.assignment_id = a.id AND my_asg.tenant_id = a.tenant_id AND my_asg.student_id = ${'$'}${idx - 1}`
       : '';
     const studentSelect = isStudentOnly(user)
-      ? `, my_asg.id AS my_assignment_student_id, my_asg.status AS my_status, my_asg.total_score AS my_total_score, my_asg.submitted_at AS my_submitted_at, my_asg.feedback AS my_feedback`
+      ? `, my_asg.id AS my_assignment_student_id, my_asg.status AS my_status, my_asg.total_score AS my_total_score, my_asg.submitted_at AS my_submitted_at, my_asg.feedback AS my_feedback, my_asg.started_at AS my_started_at, my_asg.assigned_at AS my_assigned_at`
       : '';
     const studentParams = params;
 
@@ -547,13 +549,6 @@ class HomeworkService {
         throw Object.assign(new Error('Đã hết hạn nộp bài'), { status: 400 });
       }
 
-      if (assignment.require_password) {
-        const provided = payload?.password;
-        if (!provided || !(await bcrypt.compare(String(provided), assignment.password_hash || ''))) {
-          throw Object.assign(new Error('Sai mật khẩu bài tập'), { status: 423, code: 'INVALID_PASSWORD' });
-        }
-      }
-
       const assignmentStudentResult = await client.query(
         `SELECT * FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2 AND student_id=$3 FOR UPDATE`,
         [tenantId, assignmentId, studentId]
@@ -562,6 +557,13 @@ class HomeworkService {
         throw Object.assign(new Error('Bạn chưa được giao bài này'), { status: 403 });
       }
       const assignmentStudent = assignmentStudentResult.rows[0];
+
+      if (assignment.require_password && !assignmentStudent.started_at) {
+        const provided = payload?.password;
+        if (!provided || !(await bcrypt.compare(String(provided), assignment.password_hash || ''))) {
+          throw Object.assign(new Error('Sai mật khẩu bài tập'), { status: 423, code: 'INVALID_PASSWORD' });
+        }
+      }
 
       const timeLimitMinutes = Number(assignment.time_limit_minutes || 0);
       if (timeLimitMinutes > 0 && assignmentStudent.started_at) {
@@ -618,7 +620,8 @@ class HomeworkService {
         });
       }
 
-      const status = hasEssay ? 'submitted' : 'graded';
+      const isDraft = !!payload?.isDraft;
+      const status = isDraft ? 'draft' : (hasEssay ? 'submitted' : 'graded');
       const gradedAt = status === 'graded' ? new Date() : null;
       const submissionResult = await client.query(
         `INSERT INTO homework_submissions
@@ -630,24 +633,25 @@ class HomeworkService {
            total_score=EXCLUDED.total_score,
            feedback=EXCLUDED.feedback,
            submitted_by=EXCLUDED.submitted_by,
-           submitted_at=NOW(),
+           submitted_at=CASE WHEN $9 = TRUE THEN homework_submissions.submitted_at ELSE NOW() END,
            graded_by=COALESCE(EXCLUDED.graded_by, homework_submissions.graded_by),
            graded_at=COALESCE(EXCLUDED.graded_at, homework_submissions.graded_at),
            updated_at=NOW()
          RETURNING *`,
-        [tenantId, assignmentStudentResult.rows[0].id, JSON.stringify(storedAnswers), status, totalScore, payload?.feedback || null, studentId, gradedAt]
+        [tenantId, assignmentStudent.id, JSON.stringify(storedAnswers), status, totalScore, payload?.feedback || null, studentId, gradedAt, isDraft]
       );
 
+      const studentStatus = isDraft ? 'in_progress' : status;
       const updatedStudent = await client.query(
         `UPDATE homework_assignment_students
          SET status=$1,
-             submitted_at=NOW(),
-             total_score=$2,
-             feedback=$3,
+             submitted_at=CASE WHEN $6 = TRUE THEN submitted_at ELSE NOW() END,
+             total_score=CASE WHEN $6 = TRUE THEN total_score ELSE $2 END,
+             feedback=CASE WHEN $6 = TRUE THEN feedback ELSE $3 END,
              updated_at=NOW()
          WHERE id=$4 AND tenant_id=$5
          RETURNING *`,
-        [status, totalScore, payload?.feedback || null, assignmentStudentResult.rows[0].id, tenantId]
+        [studentStatus, totalScore, payload?.feedback || null, assignmentStudent.id, tenantId, isDraft]
       );
 
       await client.query('COMMIT');
@@ -699,11 +703,15 @@ class HomeworkService {
       const mergedAnswers = Array.from(answerMap.values());
       const score = mergedAnswers.reduce((sum, answer) => sum + Number(answer.score || 0), 0);
 
+      const requestRevision = !!data?.requestRevision;
+      const status = requestRevision ? 'draft' : 'graded';
+      const studentStatus = requestRevision ? 'revision_required' : 'graded';
+
       const submissionParams = [score, feedback, userId];
       const submissionUpdates = [
         'total_score=$1',
         'feedback=$2',
-        "status='graded'",
+        `status='${status}'`,
         'graded_by=$3',
         'graded_at=NOW()',
       ];
@@ -721,9 +729,9 @@ class HomeworkService {
 
       await client.query(
         `UPDATE homework_assignment_students
-         SET status='graded', total_score=$1, feedback=$2, updated_at=NOW()
-         WHERE id=$3 AND tenant_id=$4`,
-        [score, feedback, submission.assignment_student_id, tenantId]
+         SET status=$1, total_score=$2, feedback=$3, updated_at=NOW()
+         WHERE id=$4 AND tenant_id=$5`,
+        [studentStatus, score, feedback, submission.assignment_student_id, tenantId]
       );
 
       await client.query('COMMIT');
@@ -777,7 +785,6 @@ class HomeworkService {
   }
 
   async _syncStudents(client, tenantId, assignmentId, classId, studentIds = []) {
-    await client.query('DELETE FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2', [tenantId, assignmentId]);
     const ids = new Set((studentIds || []).map(Number).filter(Boolean));
 
     if (classId) {
@@ -788,12 +795,31 @@ class HomeworkService {
       classStudents.rows.forEach((row) => ids.add(Number(row.student_id)));
     }
 
+    if (ids.size === 0) {
+      // If no students assigned, delete only those who have not started yet
+      await client.query(
+        `DELETE FROM homework_assignment_students 
+         WHERE tenant_id=$1 AND assignment_id=$2 AND started_at IS NULL AND submitted_at IS NULL`,
+        [tenantId, assignmentId]
+      );
+      return;
+    }
+
+    // Delete student assignments for students who are NOT in the new list, BUT ONLY if they haven't started/submitted
+    const idArray = Array.from(ids);
+    await client.query(
+      `DELETE FROM homework_assignment_students 
+       WHERE tenant_id=$1 AND assignment_id=$2 AND student_id NOT IN (${idArray.map((_, i) => `$${i + 3}`).join(',')})
+       AND started_at IS NULL AND submitted_at IS NULL`,
+      [tenantId, assignmentId, ...idArray]
+    );
+
+    // Insert new student assignments without overwriting existing ones!
     for (const studentId of ids) {
       await client.query(
         `INSERT INTO homework_assignment_students (tenant_id, assignment_id, student_id, status)
-         VALUES ($1,$2,$3,'assigned')
-         ON CONFLICT (assignment_id, student_id)
-         DO UPDATE SET status='assigned', submitted_at=NULL, total_score=NULL, feedback=NULL, updated_at=NOW()`,
+         VALUES ($1, $2, $3, 'assigned')
+         ON CONFLICT (assignment_id, student_id) DO NOTHING`,
         [tenantId, assignmentId, studentId]
       );
     }
