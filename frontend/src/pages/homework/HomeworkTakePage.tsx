@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, CheckCircle2, XCircle, Clock3, Send, Sparkles, Eye, EyeOff, MessageSquare, Lock, KeyRound } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Clock3, Send, Sparkles, Eye, EyeOff, MessageSquare, Lock, KeyRound, Timer, AlarmClockOff } from 'lucide-react';
 import { homeworkApi } from '../../api';
 import { Badge, EmptyState, Loading, StatusBadge } from '../../components/common';
 
@@ -44,6 +44,9 @@ export default function HomeworkTakePage() {
   const [passwordInput, setPasswordInput] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifiedPassword, setVerifiedPassword] = useState<string | undefined>(undefined);
+  const [timeUp, setTimeUp] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const autoSubmittedRef = useRef(false);
 
   const load = async (password?: string) => {
     setLoading(true);
@@ -53,6 +56,8 @@ export default function HomeworkTakePage() {
       setDetail(item);
       setNeedsPassword(false);
       setPasswordError('');
+      setTimeUp(false);
+      setSecondsLeft(typeof item.remainingSeconds === 'number' ? item.remainingSeconds : null);
       if (password) setVerifiedPassword(password);
 
       const submission = item.mySubmission || item.students?.[0] || null;
@@ -75,6 +80,8 @@ export default function HomeworkTakePage() {
       if (code === 'PASSWORD_REQUIRED' || code === 'INVALID_PASSWORD') {
         setNeedsPassword(true);
         setPasswordError(code === 'INVALID_PASSWORD' ? 'Sai mật khẩu, vui lòng thử lại.' : '');
+      } else if (code === 'TIME_UP') {
+        setTimeUp(true);
       } else {
         toast.error(err.response?.data?.message || 'Không tải được bài tập');
       }
@@ -108,7 +115,7 @@ export default function HomeworkTakePage() {
     setAnswers((prev) => ({ ...prev, [questionId]: { ...(prev[questionId] || {}), ...patch } }));
   };
 
-  const submit = async () => {
+  const submit = async (auto = false) => {
     const payloadAnswers = questions.map((question: any) => {
       const answer = answers[Number(question.id)] || {};
       if (question.questionType === 'essay') {
@@ -117,24 +124,43 @@ export default function HomeworkTakePage() {
       return { questionId: question.id, selectedAnswer: answer.selectedAnswer || '' };
     });
 
-    const missing = questions.filter((question: any) => {
-      const answer = answers[Number(question.id)] || {};
-      if (question.questionType === 'essay') return !(answer.answerText || '').trim();
-      return !(answer.selectedAnswer || '').trim();
-    });
-    if (missing.length) return toast.error('Vui lòng trả lời đầy đủ các câu hỏi trước khi nộp');
+    if (!auto) {
+      const missing = questions.filter((question: any) => {
+        const answer = answers[Number(question.id)] || {};
+        if (question.questionType === 'essay') return !(answer.answerText || '').trim();
+        return !(answer.selectedAnswer || '').trim();
+      });
+      if (missing.length) return toast.error('Vui lòng trả lời đầy đủ các câu hỏi trước khi nộp');
+    }
 
     setSaving(true);
     try {
       await homeworkApi.submit(assignmentId, { answers: payloadAnswers, password: verifiedPassword });
-      toast.success('Đã nộp bài tập');
+      toast.success(auto ? 'Đã hết giờ, hệ thống tự động nộp bài của bạn' : 'Đã nộp bài tập');
       await load(verifiedPassword);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Không nộp được bài');
+      if (err.response?.data?.code === 'TIME_UP') {
+        setTimeUp(true);
+      } else {
+        toast.error(err.response?.data?.message || 'Không nộp được bài');
+      }
     } finally {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (secondsLeft === null || !canEdit) return;
+    if (secondsLeft <= 0) {
+      if (!autoSubmittedRef.current) {
+        autoSubmittedRef.current = true;
+        submit(true);
+      }
+      return;
+    }
+    const timer = setTimeout(() => setSecondsLeft((s) => (s !== null ? s - 1 : s)), 1000);
+    return () => clearTimeout(timer);
+  }, [secondsLeft, canEdit]);
 
   const submission = detail?.mySubmission || detail?.students?.find((student: any) => student.studentId === detail?.student_id) || null;
 
@@ -146,6 +172,19 @@ export default function HomeworkTakePage() {
       feedback: submission.submissionFeedback || submission.myFeedback || submission.feedback || '',
     };
   }, [submission]);
+
+  if (timeUp) {
+    return (
+      <div style={{ maxWidth: 420, margin: '80px auto', textAlign: 'center' }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 24 }}><ArrowLeft size={14} /> Quay lại</button>
+        <div style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--danger-light)', display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}>
+          <AlarmClockOff color="var(--danger)" size={28} />
+        </div>
+        <h2 style={{ margin: '0 0 6px' }}>Đã hết thời gian làm bài</h2>
+        <p style={{ color: 'var(--gray-500)' }}>Thời gian làm bài đã kết thúc, bạn không thể vào làm bài này nữa. Nếu bài đã kịp nộp trước đó, hãy liên hệ giáo viên để xem lại kết quả.</p>
+      </div>
+    );
+  }
 
   if (needsPassword) {
     return (
@@ -212,6 +251,17 @@ export default function HomeworkTakePage() {
           {!isLocked && <ProgressRing percent={completionRate} />}
 
           <div style={{ display: 'grid', gap: 12 }}>
+            {secondsLeft !== null && canEdit && (
+              <div className="stat-card" style={{ minHeight: 96, background: secondsLeft <= 60 ? 'var(--danger-light)' : undefined, borderColor: secondsLeft <= 60 ? '#fecaca' : undefined }}>
+                <div>
+                  <div className="stat-value" style={{ color: secondsLeft <= 60 ? 'var(--danger)' : undefined, fontVariantNumeric: 'tabular-nums' }}>
+                    {String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:{String(secondsLeft % 60).padStart(2, '0')}
+                  </div>
+                  <div className="stat-label">THỜI GIAN CÒN LẠI</div>
+                </div>
+                <Timer color={secondsLeft <= 60 ? 'var(--danger)' : 'var(--primary)'} />
+              </div>
+            )}
             <div className="stat-card" style={{ minHeight: 96 }}>
               <div>
                 <div className="stat-value">{deadlineText}</div>
@@ -361,7 +411,7 @@ export default function HomeworkTakePage() {
       {canEdit && questions.length > 0 && (
         <div style={{ position: 'sticky', bottom: 16, display: 'flex', justifyContent: 'flex-end', paddingTop: 6 }}>
           <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', border: '1px solid var(--gray-200)', borderRadius: 999, padding: 10, boxShadow: '0 12px 30px rgba(15, 23, 42, 0.12)' }}>
-            <button className="btn btn-primary" onClick={submit} disabled={saving} style={{ minWidth: 160 }}><Send size={14} /> {saving ? 'Đang nộp...' : `Nộp bài (${answeredCount}/${totalQuestions})`}</button>
+            <button className="btn btn-primary" onClick={() => submit()} disabled={saving} style={{ minWidth: 160 }}><Send size={14} /> {saving ? 'Đang nộp...' : `Nộp bài (${answeredCount}/${totalQuestions})`}</button>
           </div>
         </div>
       )}

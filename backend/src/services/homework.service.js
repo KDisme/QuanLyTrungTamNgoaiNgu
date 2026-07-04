@@ -60,6 +60,7 @@ function camelAssignment(row) {
     showAnswersAfterSubmit: row.show_answers_after_submit,
     showScoreAfterSubmit: row.show_score_after_submit,
     requirePassword: row.require_password,
+    timeLimitMinutes: row.time_limit_minutes,
     questionCount: Number(row.question_count || 0),
     studentCount: Number(row.student_count || 0),
     submittedCount: Number(row.submitted_count || 0),
@@ -78,6 +79,7 @@ function camelStudent(row) {
     studentName: row.full_name,
     studentEmail: row.email,
     assignmentStudentId: row.id,
+    startedAt: row.started_at,
     submissionId: row.submission_id,
     submissionStatus: row.submission_status,
     submissionSubmittedAt: row.submission_submitted_at,
@@ -305,10 +307,34 @@ class HomeworkService {
     let questions = questionsResult.rows.map(camelQuestion);
     let canRevealAnswers;
     let canRevealScore;
+    let remainingSeconds;
     if (isStudentOnly(user)) {
       const hasSubmitted = ['submitted', 'graded'].includes(String(mySubmission?.submissionStatus || '').toLowerCase());
       canRevealAnswers = !!assignment.show_answers_after_submit && hasSubmitted;
       canRevealScore = !!assignment.show_score_after_submit && hasSubmitted;
+
+      const timeLimitMinutes = Number(assignment.time_limit_minutes || 0);
+      if (timeLimitMinutes > 0 && mySubmission && !hasSubmitted) {
+        let startedAt = mySubmission.startedAt;
+        if (!startedAt) {
+          const started = await pool.query(
+            `UPDATE homework_assignment_students SET started_at = NOW(), updated_at = NOW()
+             WHERE id = $1 AND tenant_id = $2 AND started_at IS NULL
+             RETURNING started_at`,
+            [mySubmission.assignmentStudentId, tenantId]
+          );
+          startedAt = started.rows[0]?.started_at || new Date();
+          mySubmission.startedAt = startedAt;
+        }
+        const deadlineAt = new Date(new Date(startedAt).getTime() + timeLimitMinutes * 60000);
+        remainingSeconds = Math.floor((deadlineAt.getTime() - Date.now()) / 1000);
+        if (remainingSeconds <= 0) {
+          const err = new Error('Đã hết thời gian làm bài, bạn không thể vào làm nữa.');
+          err.status = 423;
+          err.code = 'TIME_UP';
+          throw err;
+        }
+      }
 
       if (!canRevealAnswers) {
         questions = questions.map((question) => ({ ...question, correctAnswer: null }));
@@ -337,6 +363,7 @@ class HomeworkService {
       mySubmission,
       canRevealAnswers: isStudentOnly(user) ? canRevealAnswers : undefined,
       canRevealScore: isStudentOnly(user) ? canRevealScore : undefined,
+      remainingSeconds: isStudentOnly(user) ? remainingSeconds : undefined,
     };
   }
 
@@ -354,11 +381,12 @@ class HomeworkService {
         throw Object.assign(new Error('Vui lòng nhập mật khẩu cho bài tập'), { status: 400 });
       }
       const passwordHash = requirePassword ? await bcrypt.hash(String(data.password).trim(), 10) : null;
+      const timeLimitMinutes = data.timeLimitMinutes ? Math.max(1, parseInt(data.timeLimitMinutes, 10)) : null;
 
       const assignmentResult = await client.query(
         `INSERT INTO homework_assignments
-         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, time_limit_minutes, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)
          RETURNING *`,
         [
           tenantId,
@@ -374,6 +402,7 @@ class HomeworkService {
           data.showScoreAfterSubmit !== undefined ? !!data.showScoreAfterSubmit : true,
           requirePassword,
           passwordHash,
+          timeLimitMinutes,
           user?.id || null,
         ]
       );
@@ -426,6 +455,10 @@ class HomeworkService {
         passwordHash = null;
       }
 
+      const timeLimitMinutes = data.timeLimitMinutes !== undefined
+        ? (data.timeLimitMinutes ? Math.max(1, parseInt(data.timeLimitMinutes, 10)) : null)
+        : current.rows[0].time_limit_minutes;
+
       const assignmentResult = await client.query(
         `UPDATE homework_assignments
          SET class_id=$1,
@@ -440,8 +473,9 @@ class HomeworkService {
              show_score_after_submit=$10,
              require_password=$11,
              password_hash=$12,
-             updated_by=$13, updated_at=NOW()
-         WHERE id=$14 AND tenant_id=$15
+             time_limit_minutes=$13,
+             updated_by=$14, updated_at=NOW()
+         WHERE id=$15 AND tenant_id=$16
          RETURNING *`,
         [
           data.classId || current.rows[0].class_id,
@@ -456,6 +490,7 @@ class HomeworkService {
           data.showScoreAfterSubmit !== undefined ? !!data.showScoreAfterSubmit : current.rows[0].show_score_after_submit,
           requirePassword,
           passwordHash,
+          timeLimitMinutes,
           user?.id || null,
           id,
           tenantId,
@@ -525,6 +560,16 @@ class HomeworkService {
       );
       if (!assignmentStudentResult.rows.length) {
         throw Object.assign(new Error('Bạn chưa được giao bài này'), { status: 403 });
+      }
+      const assignmentStudent = assignmentStudentResult.rows[0];
+
+      const timeLimitMinutes = Number(assignment.time_limit_minutes || 0);
+      if (timeLimitMinutes > 0 && assignmentStudent.started_at) {
+        const deadlineAt = new Date(new Date(assignmentStudent.started_at).getTime() + timeLimitMinutes * 60000);
+        const graceMs = 30000; // network/auto-submit latency buffer
+        if (Date.now() > deadlineAt.getTime() + graceMs) {
+          throw Object.assign(new Error('Đã hết thời gian làm bài, bài nộp không được chấp nhận'), { status: 423, code: 'TIME_UP' });
+        }
       }
 
       const questionsResult = await client.query(

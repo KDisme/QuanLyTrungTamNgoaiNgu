@@ -17,6 +17,7 @@ const statements = [
     show_score_after_submit BOOLEAN NOT NULL DEFAULT TRUE,
     require_password BOOLEAN NOT NULL DEFAULT FALSE,
     password_hash VARCHAR(255),
+    time_limit_minutes INTEGER,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -26,6 +27,7 @@ const statements = [
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS show_score_after_submit BOOLEAN NOT NULL DEFAULT TRUE`,
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS require_password BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
+  `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_status ON homework_assignments(tenant_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignments_tenant_class ON homework_assignments(tenant_id, class_id)`,
   `CREATE TABLE IF NOT EXISTS homework_assignment_questions (
@@ -52,6 +54,7 @@ const statements = [
     student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     status VARCHAR(30) NOT NULL DEFAULT 'assigned',
     assigned_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMP NULL,
     submitted_at TIMESTAMP NULL,
     total_score NUMERIC(10,2) NULL,
     feedback TEXT,
@@ -59,6 +62,7 @@ const statements = [
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (assignment_id, student_id)
   )`,
+  `ALTER TABLE homework_assignment_students ADD COLUMN IF NOT EXISTS started_at TIMESTAMP NULL`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignment_students_assignment ON homework_assignment_students(tenant_id, assignment_id)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignment_students_student ON homework_assignment_students(tenant_id, student_id)`,
   `CREATE TABLE IF NOT EXISTS homework_submissions (

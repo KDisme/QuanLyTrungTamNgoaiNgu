@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle, Lock } from 'lucide-react';
+import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle, Lock, Timer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { classesApi, homeworkApi } from '../../api';
 import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '../../components/common';
@@ -59,6 +59,8 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     showAnswersAfterSubmit: initial?.show_answers_after_submit ?? initial?.showAnswersAfterSubmit ?? false,
     showScoreAfterSubmit: initial?.show_score_after_submit ?? initial?.showScoreAfterSubmit ?? true,
     requirePassword: initial?.require_password ?? initial?.requirePassword ?? false,
+    hasTimeLimit: !!(initial?.time_limit_minutes ?? initial?.timeLimitMinutes),
+    timeLimitMinutes: initial?.time_limit_minutes ?? initial?.timeLimitMinutes ?? 30,
     password: '',
     questions: initial?.questions?.length
       ? initial.questions.map((question: any, index: number) => ({
@@ -169,6 +171,7 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
         ...form,
         classId: form.classId ? Number(form.classId) : null,
         totalScore: Number(form.totalScore || 100),
+        timeLimitMinutes: form.hasTimeLimit ? Number(form.timeLimitMinutes || 30) : null,
         questions,
       };
       if (initial) await homeworkApi.update(initial.id, payload);
@@ -340,6 +343,39 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
 
       {tab === 'config' && (
         <div style={{ display: 'grid', gap: 14 }}>
+          <div className="toggle-row">
+            <div className="toggle-row-text">
+              <div className="toggle-row-title">Giới hạn thời gian làm bài</div>
+              <div className="toggle-row-desc">
+                {form.hasTimeLimit
+                  ? `Bật: khi học viên bắt đầu làm bài, đồng hồ đếm ngược ${form.timeLimitMinutes || 0} phút sẽ chạy. Hết giờ, bài tự đóng lại, học viên không vào làm tiếp được nữa.`
+                  : 'Tắt: học viên làm bài không giới hạn thời gian (chỉ phụ thuộc hạn nộp).'}
+              </div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={!!form.hasTimeLimit}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, hasTimeLimit: e.target.checked }))}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
+
+          {form.hasTimeLimit && (
+            <div className="form-group" style={{ maxWidth: 240 }}>
+              <label className="form-label">Thời gian làm bài (phút)</label>
+              <input
+                type="number"
+                min={1}
+                className="form-input"
+                value={form.timeLimitMinutes}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, timeLimitMinutes: e.target.value }))}
+                placeholder="VD: 30"
+              />
+            </div>
+          )}
+
           <label className="toggle-row" style={{ cursor: 'pointer' }}>
             <div className="toggle-row-text">
               <div className="toggle-row-title">Cho phép nộp muộn</div>
@@ -795,6 +831,9 @@ export default function HomeworkAssignmentsPage() {
                           )}
                           {(row.requirePassword || row.require_password) && (
                             <Badge variant="orange"><Lock size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Có mật khẩu</Badge>
+                          )}
+                          {(row.timeLimitMinutes || row.time_limit_minutes) && (
+                            <Badge variant="purple"><Timer size={11} style={{ marginRight: 4, verticalAlign: -1 }} />{row.timeLimitMinutes || row.time_limit_minutes} phút</Badge>
                           )}
                         </div>
                       )}
