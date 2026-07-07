@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Pencil, Headphones, BookOpen, Mic, PenLine, UploadCloud } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Headphones, BookOpen, Mic, PenLine, UploadCloud, ClipboardList, FolderOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { examMediaApi, examQuestionsApi } from '../../api';
+import { examMediaApi, examQuestionsApi, homeworkQuestionBankApi } from '../../api';
 import { useAuth } from '../../hooks/useAuth';
-import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '../../components/common';
+import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge, Tabs } from '../../components/common';
 
 const FORMAT_OPTIONS = [
   { code: 'TOEIC_LR', label: 'TOEIC hai kỹ năng', duration: 120 },
@@ -218,7 +218,7 @@ function QuestionForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
   </Modal>;
 }
 
-export default function QuestionBankPage() {
+function ExamQuestionBankPanel() {
   const { user } = useAuth();
   const canDelete = user?.roles?.includes('admin');
   const [rows, setRows] = useState<any[]>([]);
@@ -242,4 +242,265 @@ export default function QuestionBankPage() {
     {loading ? <Loading /> : <div className="table-container"><table><thead><tr><th>Câu hỏi</th><th>Format</th><th>Kỹ năng</th><th>Part</th><th>Media/Timer</th><th>Trạng thái</th><th></th></tr></thead><tbody>{rows.length === 0 ? <tr><td colSpan={7}><EmptyState /></td></tr> : rows.map(q => <tr key={q.id}><td><b>{q.question_text || q.topic || q.group_key || 'Câu hỏi không hiển thị text'}</b><div style={{ color: 'var(--gray-500)', fontSize: 12 }}>{q.topic || (q.group_key ? 'Có nội dung/audio chung' : '')}</div></td><td><Badge variant={q.format_code === 'TOEIC_4_SKILLS' ? 'purple' : 'blue'}>{q.format_code || 'TOEIC_LR'}</Badge></td><td>{q.skill}</td><td>{q.part}</td><td style={{ fontSize: 12 }}>{q.audio_url ? 'Audio ' : ''}{q.image_url ? 'Ảnh ' : ''}{q.prep_seconds ? `Prep ${q.prep_seconds}s ` : ''}{q.response_seconds ? `Record ${q.response_seconds}s` : ''}</td><td><StatusBadge status={q.status} /></td><td><div style={{ display: 'flex', gap: 6 }}><button className="btn btn-secondary btn-sm" onClick={() => edit(q)}><Pencil size={12}/> Sửa</button>{canDelete && <button className="btn btn-danger btn-sm" onClick={() => setDeleting(q)}><Trash2 size={12}/> Xoá</button>}</div></td></tr>)}</tbody></table></div>}
     {showAdd && <QuestionForm onClose={() => setShowAdd(false)} onSuccess={load} />}{editing && <QuestionForm initial={editing} onClose={() => setEditing(null)} onSuccess={load} />}{deleting && <ConfirmDialog message="Xoá câu hỏi này?" onCancel={() => setDeleting(null)} onConfirm={del} />}
   </div>;
+}
+
+// ============ HOMEWORK QUESTION BANK ============
+
+const HW_QUESTION_TYPES = [
+  { value: 'true_false', label: 'Đúng / Sai' },
+  { value: 'multiple_choice_4', label: 'Trắc nghiệm 4 đáp án' },
+  { value: 'essay', label: 'Tự luận' },
+];
+
+function emptyHwBankForm(type = 'multiple_choice_4') {
+  return {
+    questionType: type,
+    questionText: '',
+    helpText: '',
+    score: 1,
+    category: '',
+    correctAnswer: type === 'true_false' ? 'true' : type === 'multiple_choice_4' ? 'A' : '',
+    options: type === 'multiple_choice_4'
+      ? [{ label: 'A', text: '' }, { label: 'B', text: '' }, { label: 'C', text: '' }, { label: 'D', text: '' }]
+      : [],
+  };
+}
+
+function HomeworkBankQuestionForm({ initial, onClose, onSuccess }: { initial?: any; onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState<any>(() => initial ? {
+    questionType: initial.questionType || 'multiple_choice_4',
+    questionText: initial.questionText || '',
+    helpText: initial.helpText || '',
+    score: initial.score || 1,
+    category: initial.category || '',
+    correctAnswer: initial.correctAnswer || '',
+    options: Array.isArray(initial.options) && initial.options.length
+      ? initial.options
+      : emptyHwBankForm(initial.questionType).options,
+  } : emptyHwBankForm());
+  const [saving, setSaving] = useState(false);
+
+  const changeType = (type: string) => setForm(emptyHwBankForm(type));
+  const setOption = (index: number, text: string) => setForm((prev: any) => ({
+    ...prev,
+    options: prev.options.map((o: any, i: number) => i === index ? { ...o, text } : o),
+  }));
+
+  const submit = async () => {
+    if (!form.questionText.trim()) return toast.error('Vui lòng nhập nội dung câu hỏi');
+    setSaving(true);
+    try {
+      if (initial) await homeworkQuestionBankApi.update(initial.id, form);
+      else await homeworkQuestionBankApi.create(form);
+      toast.success('Đã lưu câu hỏi vào ngân hàng');
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không lưu được câu hỏi');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={initial ? 'Sửa câu hỏi' : 'Thêm câu hỏi vào ngân hàng'}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn btn-secondary" onClick={onClose}>Huỷ</button>
+          <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu câu hỏi'}</button>
+        </>
+      )}
+    >
+      <div style={{ display: 'grid', gap: 14 }}>
+        <div className="grid-2">
+          <div className="form-group">
+            <label className="form-label">Dạng câu hỏi</label>
+            <select className="form-select" value={form.questionType} onChange={(e) => changeType(e.target.value)}>
+              {HW_QUESTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Điểm gợi ý</label>
+            <input type="number" className="form-input" value={form.score} onChange={(e) => setForm((prev: any) => ({ ...prev, score: Number(e.target.value) }))} />
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Nội dung câu hỏi</label>
+          <textarea className="form-textarea" rows={3} value={form.questionText} onChange={(e) => setForm((prev: any) => ({ ...prev, questionText: e.target.value }))} placeholder="Nhập câu hỏi" />
+        </div>
+
+        <div className="grid-2">
+          <div className="form-group">
+            <label className="form-label">Ghi chú / gợi ý</label>
+            <input className="form-input" value={form.helpText} onChange={(e) => setForm((prev: any) => ({ ...prev, helpText: e.target.value }))} placeholder="Không bắt buộc" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Chủ đề / Nhãn phân loại</label>
+            <input className="form-input" value={form.category} onChange={(e) => setForm((prev: any) => ({ ...prev, category: e.target.value }))} placeholder="VD: Unit 3, Ngữ pháp, Từ vựng..." />
+          </div>
+        </div>
+
+        {form.questionType === 'multiple_choice_4' && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {form.options.map((option: any, index: number) => (
+              <div key={option.label} style={{ display: 'grid', gridTemplateColumns: '30px 1fr auto', gap: 8, alignItems: 'center' }}>
+                <b>{option.label}</b>
+                <input className="form-input" value={option.text} onChange={(e) => setOption(index, e.target.value)} placeholder={`Đáp án ${option.label}`} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                  <input type="radio" name="hw-bank-correct" checked={form.correctAnswer === option.label} onChange={() => setForm((prev: any) => ({ ...prev, correctAnswer: option.label }))} />
+                  Đúng
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {form.questionType === 'true_false' && (
+          <div className="form-group">
+            <label className="form-label">Đáp án đúng</label>
+            <select className="form-select" value={form.correctAnswer} onChange={(e) => setForm((prev: any) => ({ ...prev, correctAnswer: e.target.value }))}>
+              <option value="true">Đúng</option>
+              <option value="false">Sai</option>
+            </select>
+          </div>
+        )}
+
+        {form.questionType === 'essay' && (
+          <div className="alert alert-info">Câu tự luận không cần đáp án đúng — giáo viên sẽ chấm thủ công khi dùng trong bài tập.</div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function HomeworkQuestionBankPanel() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [questionType, setQuestionType] = useState('');
+  const [category, setCategory] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
+  const [deleting, setDeleting] = useState<any>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await homeworkQuestionBankApi.getAll({ search, questionType, category, limit: 200 });
+      setRows(res.data.items || []);
+      setTotal(res.data.total || 0);
+      setCategories(res.data.categories || []);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, questionType, category]);
+  useEffect(() => { load(); }, [load]);
+
+  const del = async () => {
+    await homeworkQuestionBankApi.delete(deleting.id);
+    toast.success('Đã xoá câu hỏi khỏi ngân hàng');
+    setDeleting(null);
+    load();
+  };
+
+  const stat = useMemo(() => rows.reduce((acc: any, q: any) => { acc[q.questionType] = (acc[q.questionType] || 0) + 1; return acc; }, {}), [rows]);
+
+  const typeLabel = (type: string) => HW_QUESTION_TYPES.find((t) => t.value === type)?.label || type;
+
+  return (
+    <div>
+      <div className="page-header flex items-center justify-between">
+        <div>
+          <h1 className="page-title">Ngân hàng câu hỏi bài tập về nhà</h1>
+          <p className="page-subtitle">Soạn câu hỏi 1 lần, dùng lại cho nhiều bài tập/nhiều lớp khác nhau — không cần gõ lại mỗi lần tạo bài mới.</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowAdd(true)}><Plus size={15} /> Thêm câu hỏi</button>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card"><div><div className="stat-value">{total}</div><div className="stat-label">TỔNG CÂU</div></div><ClipboardList color="var(--primary)" /></div>
+        <div className="stat-card"><div><div className="stat-value">{stat.multiple_choice_4 || 0}</div><div className="stat-label">TRẮC NGHIỆM</div></div><BookOpen color="var(--primary)" /></div>
+        <div className="stat-card"><div><div className="stat-value">{stat.true_false || 0}</div><div className="stat-label">ĐÚNG/SAI</div></div><CheckSquareIcon /></div>
+        <div className="stat-card"><div><div className="stat-value">{stat.essay || 0}</div><div className="stat-label">TỰ LUẬN</div></div><PenLine color="var(--primary)" /></div>
+      </div>
+
+      <div className="filter-bar">
+        <div className="search-input">
+          <Search className="search-icon" size={14} />
+          <input className="form-input" placeholder="Tìm câu hỏi, chủ đề..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <select className="form-select" style={{ width: 220 }} value={questionType} onChange={(e) => setQuestionType(e.target.value)}>
+          <option value="">Tất cả dạng câu hỏi</option>
+          {HW_QUESTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        <select className="form-select" style={{ width: 200 }} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">Tất cả chủ đề</option>
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {loading ? <Loading /> : (
+        <div className="table-container">
+          <table>
+            <thead><tr><th>Câu hỏi</th><th>Dạng</th><th>Chủ đề</th><th>Điểm</th><th></th></tr></thead>
+            <tbody>
+              {rows.length === 0 ? <tr><td colSpan={5}><EmptyState message="Ngân hàng chưa có câu hỏi nào" /></td></tr> : rows.map((q) => (
+                <tr key={q.id}>
+                  <td><b>{q.questionText}</b>{q.helpText && <div style={{ color: 'var(--gray-500)', fontSize: 12 }}>{q.helpText}</div>}</td>
+                  <td><Badge variant="purple">{typeLabel(q.questionType)}</Badge></td>
+                  <td>{q.category ? <Badge variant="blue">{q.category}</Badge> : <span style={{ color: 'var(--gray-400)' }}>—</span>}</td>
+                  <td>{q.score}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setEditing(q)}><Pencil size={12} /> Sửa</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setDeleting(q)}><Trash2 size={12} /> Xoá</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showAdd && <HomeworkBankQuestionForm onClose={() => setShowAdd(false)} onSuccess={load} />}
+      {editing && <HomeworkBankQuestionForm initial={editing} onClose={() => setEditing(null)} onSuccess={load} />}
+      {deleting && <ConfirmDialog message="Xoá câu hỏi này khỏi ngân hàng?" onCancel={() => setDeleting(null)} onConfirm={del} />}
+    </div>
+  );
+}
+
+function CheckSquareIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 11 12 14 22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  );
+}
+
+// ============ WRAPPER WITH TABS ============
+
+export default function QuestionBankPage() {
+  const [tab, setTab] = useState('exam');
+  return (
+    <div>
+      <Tabs
+        tabs={[
+          { id: 'exam', label: 'Ngân hàng thi thử', icon: <Headphones size={14} /> },
+          { id: 'homework', label: 'Ngân hàng bài tập về nhà', icon: <FolderOpen size={14} /> },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+      <div style={{ marginTop: 16 }}>
+        {tab === 'exam' ? <ExamQuestionBankPanel /> : <HomeworkQuestionBankPanel />}
+      </div>
+    </div>
+  );
 }

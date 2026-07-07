@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle, Lock, Timer } from 'lucide-react';
+import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle, Lock, Timer, AlertTriangle, Library, FolderInput } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { classesApi, homeworkApi } from '../../api';
+import { classesApi, homeworkApi, homeworkQuestionBankApi } from '../../api';
 import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '../../components/common';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -73,6 +73,7 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
   const [classes, setClasses] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'info' | 'config' | 'security'>('info');
+  const [showBankPicker, setShowBankPicker] = useState(false);
   const [form, setForm] = useState<any>({
     title: initial?.title || '',
     description: initial?.description || '',
@@ -158,6 +159,42 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     }));
   };
 
+  const insertFromBank = (items: any[]) => {
+    setForm((prev: any) => {
+      const startOrder = prev.questions.length + 1;
+      const converted: HomeworkQuestion[] = items.map((item, index) => ({
+        orderNumber: startOrder + index,
+        questionType: item.questionType,
+        questionText: item.questionText,
+        helpText: item.helpText || '',
+        isRequired: true,
+        score: item.score || 1,
+        correctAnswer: item.correctAnswer || '',
+        options: Array.isArray(item.options) ? item.options.map((o: any) => ({ label: o.label, text: o.text })) : [],
+      }));
+      return { ...prev, questions: [...prev.questions, ...converted] };
+    });
+    toast.success(`Đã thêm ${items.length} câu từ ngân hàng vào bài`);
+    setShowBankPicker(false);
+  };
+
+  const saveQuestionToBank = async (question: HomeworkQuestion) => {
+    if (!question.questionText.trim()) return toast.error('Câu hỏi chưa có nội dung để lưu');
+    try {
+      await homeworkQuestionBankApi.create({
+        questionType: question.questionType,
+        questionText: question.questionText,
+        helpText: question.helpText,
+        score: question.score,
+        correctAnswer: question.correctAnswer,
+        options: question.options,
+      });
+      toast.success('Đã lưu câu hỏi vào ngân hàng để dùng lại sau');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không lưu được vào ngân hàng');
+    }
+  };
+
   const goNext = () => {
     if (tab === 'info') {
       if (!form.title.trim()) return toast.error('Vui lòng nhập tiêu đề bài tập');
@@ -214,6 +251,7 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
   };
 
   return (
+    <>
     <Modal
       title={initial ? 'Sửa bài tập về nhà' : 'Tạo bài tập về nhà'}
       size="xl"
@@ -299,7 +337,10 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
               <div style={{ fontWeight: 700 }}>Danh sách câu hỏi</div>
               <div style={{ color: 'var(--gray-500)', fontSize: 13 }}>Hỗ trợ True/False, trắc nghiệm 4 đáp án và tự luận.</div>
             </div>
-            <button className="btn btn-secondary" onClick={addQuestion}><Plus size={14} /> Thêm câu</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-secondary" onClick={() => setShowBankPicker(true)}><Library size={14} /> Chọn từ ngân hàng</button>
+              <button className="btn btn-secondary" onClick={addQuestion}><Plus size={14} /> Thêm câu</button>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gap: 12 }}>
@@ -312,7 +353,10 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
                       {QUESTION_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                     </select>
                   </div>
-                  <button className="btn btn-danger btn-sm" onClick={() => removeQuestion(index)} disabled={form.questions.length === 1}><Trash2 size={12} /> Xoá</button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => saveQuestionToBank(question)} title="Lưu câu này vào ngân hàng để dùng lại cho bài khác"><FolderInput size={12} /> Lưu vào ngân hàng</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => removeQuestion(index)} disabled={form.questions.length === 1}><Trash2 size={12} /> Xoá</button>
+                  </div>
                 </div>
 
                 <div className="grid-2">
@@ -499,6 +543,111 @@ function HomeworkForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
         </div>
       )}
     </Modal>
+    {showBankPicker && <BankPickerModal onClose={() => setShowBankPicker(false)} onConfirm={insertFromBank} />}
+    </>
+  );
+}
+
+const BANK_QUESTION_TYPES = [
+  { value: 'true_false', label: 'Đúng / Sai' },
+  { value: 'multiple_choice_4', label: 'Trắc nghiệm 4 đáp án' },
+  { value: 'essay', label: 'Tự luận' },
+];
+
+function BankPickerModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: (items: any[]) => void }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [questionType, setQuestionType] = useState('');
+  const [category, setCategory] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await homeworkQuestionBankApi.getAll({ search, questionType, category, limit: 200 });
+      setItems(res.data.items || []);
+      setCategories(res.data.categories || []);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, questionType, category]);
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const typeLabel = (type: string) => BANK_QUESTION_TYPES.find((t) => t.value === type)?.label || type;
+
+  return (
+    <Modal
+      title="Chọn câu hỏi từ ngân hàng"
+      size="lg"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn btn-secondary" onClick={onClose}>Huỷ</button>
+          <button
+            className="btn btn-primary"
+            disabled={selectedIds.size === 0}
+            onClick={() => onConfirm(items.filter((item) => selectedIds.has(item.id)))}
+          >
+            Thêm {selectedIds.size > 0 ? `${selectedIds.size} câu` : ''} vào bài
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'grid', gap: 12 }}>
+        <div className="filter-bar">
+          <div className="search-input">
+            <Search className="search-icon" size={14} />
+            <input className="form-input" placeholder="Tìm câu hỏi..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <select className="form-select" style={{ width: 200 }} value={questionType} onChange={(e) => setQuestionType(e.target.value)}>
+            <option value="">Tất cả dạng câu hỏi</option>
+            {BANK_QUESTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <select className="form-select" style={{ width: 180 }} value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="">Tất cả chủ đề</option>
+            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        {loading ? <Loading /> : items.length === 0 ? (
+          <EmptyState message="Ngân hàng chưa có câu hỏi phù hợp. Hãy soạn câu hỏi trong bài rồi bấm 'Lưu vào ngân hàng' để dùng lại sau." />
+        ) : (
+          <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
+            {items.map((item) => (
+              <label
+                key={item.id}
+                style={{
+                  display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'start',
+                  padding: 12, border: '1px solid var(--gray-200)', borderRadius: 12, cursor: 'pointer',
+                  background: selectedIds.has(item.id) ? '#eff6ff' : '#fff',
+                }}
+              >
+                <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggle(item.id)} style={{ marginTop: 3 }} />
+                <div>
+                  <div style={{ fontWeight: 600 }}>{item.questionText}</div>
+                  {item.helpText && <div style={{ color: 'var(--gray-500)', fontSize: 12, marginTop: 2 }}>{item.helpText}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <Badge variant="purple">{typeLabel(item.questionType)}</Badge>
+                  {item.category && <Badge variant="blue">{item.category}</Badge>}
+                  <Badge variant="gray">{item.score} điểm</Badge>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -583,7 +732,7 @@ function GradeStudentModal({
     }, 0);
   }, [answersByQuestion, objectiveQuestions]);
 
-  const essayScore = useMemo(() => Object.values(scores).reduce((sum, value) => sum + Number(value || 0), 0), [scores]);
+  const essayScore = useMemo(() => Object.values(scores).reduce((sum: number, value) => sum + Number(value || 0), 0), [scores]);
 
   const totalScore = objectiveScore + essayScore;
 

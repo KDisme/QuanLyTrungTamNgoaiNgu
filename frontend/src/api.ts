@@ -191,3 +191,11 @@ export const homeworkApi = {
   submit: (id: number, data: object) => api.post(`/homework-assignments/${id}/submit`, data),
   grade: (submissionId: number, data: object) => api.patch(`/homework-submissions/${submissionId}/grade`, data),
 };
+
+export const homeworkQuestionBankApi = {
+  getAll: (params?: object) => api.get('/homework-question-bank', { params }),
+  create: (data: object) => api.post('/homework-question-bank', data),
+  update: (id: number, data: object) => api.put(`/homework-question-bank/${id}`, data),
+  delete: (id: number) => api.delete(`/homework-question-bank/${id}`),
+  bulkCreate: (data: object) => api.post('/homework-question-bank/bulk', data),
+};

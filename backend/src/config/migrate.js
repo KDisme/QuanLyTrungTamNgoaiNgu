@@ -82,7 +82,23 @@ const statements = [
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (assignment_student_id)
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_homework_submissions_tenant_status ON homework_submissions(tenant_id, status)`
+  `CREATE INDEX IF NOT EXISTS idx_homework_submissions_tenant_status ON homework_submissions(tenant_id, status)`,
+  `CREATE TABLE IF NOT EXISTS homework_question_bank (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    question_type VARCHAR(30) NOT NULL DEFAULT 'multiple_choice_4',
+    question_text TEXT NOT NULL,
+    help_text TEXT,
+    score NUMERIC(10,2) NOT NULL DEFAULT 1,
+    correct_answer VARCHAR(20),
+    options JSONB NOT NULL DEFAULT '[]',
+    category VARCHAR(150),
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_homework_question_bank_tenant ON homework_question_bank(tenant_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_homework_question_bank_category ON homework_question_bank(tenant_id, category)`
 ];
 
 async function migrate() {

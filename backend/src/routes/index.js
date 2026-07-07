@@ -19,6 +19,7 @@ const { scheduleController: schedCtrl, attendanceController: attendCtrl } = requ
 const feeCtrl = require('../controllers/fee.controller');
 const examCtrl = require('../controllers/exam.controller');
 const homeworkCtrl = require('../controllers/homework.controller');
+const homeworkBankCtrl = require('../controllers/homeworkQuestionBank.controller');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -159,5 +160,11 @@ tenantRouter.put('/homework-assignments/:id', authenticate, requireRole('admin',
 tenantRouter.delete('/homework-assignments/:id', authenticate, requireRole('admin', 'teacher'), homeworkCtrl.delete);
 tenantRouter.post('/homework-assignments/:id/submit', authenticate, homeworkCtrl.submit);
 tenantRouter.patch('/homework-submissions/:submissionId/grade', authenticate, requireRole('admin', 'teacher'), homeworkCtrl.grade);
+
+tenantRouter.get('/homework-question-bank', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.list);
+tenantRouter.post('/homework-question-bank', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.create);
+tenantRouter.post('/homework-question-bank/bulk', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.bulkCreate);
+tenantRouter.put('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.update);
+tenantRouter.delete('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.delete);
 
 module.exports = router;
