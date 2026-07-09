@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Eye, Edit2, Trash2 } from 'lucide-react';
+import { Search, Eye, Edit2, Trash2, KeyRound, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usersApi, branchesApi } from '../../api';
 import { useAuth } from '../../hooks/useAuth';
@@ -27,10 +27,28 @@ function UserActionButtons({ user, detailPath, onEdit, onDeleted }: { user: any;
     }
   };
 
+  const handleResetPassword = async () => {
+    const ok = window.confirm(`Đặt lại mật khẩu cho "${user.full_name}"? Mật khẩu cũ sẽ không còn dùng được nữa.`);
+    if (!ok) return;
+    try {
+      const res = await usersApi.resetPassword(user.id);
+      window.alert(`Đã đặt lại mật khẩu cho "${user.full_name}".\n\nMật khẩu mới: ${res.data.temporaryPassword}\n\nHãy gửi lại mật khẩu này cho người dùng — hệ thống sẽ không hiển thị lại được nữa.`);
+      onDeleted();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không đặt lại được mật khẩu');
+    }
+  };
+
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
       <button title="Xem chi tiết" className="btn btn-secondary btn-sm" onClick={() => navigate(detailPath)}><Eye size={14} /></button>
       <button title="Sửa tài khoản" className="btn btn-secondary btn-sm" onClick={onEdit}><Edit2 size={14} /></button>
+      <button
+        title={hasRole('admin') ? 'Đặt lại mật khẩu' : 'Chỉ admin được đặt lại mật khẩu'}
+        className="btn btn-secondary btn-sm"
+        disabled={!hasRole('admin')}
+        onClick={handleResetPassword}
+      ><KeyRound size={14} /></button>
       <button title={isSelf ? 'Không thể tự xoá tài khoản đang đăng nhập' : (!hasRole('admin') ? 'Chỉ admin được xoá tài khoản' : 'Xoá tài khoản')} className="btn btn-danger btn-sm" disabled={!canDelete} onClick={handleDelete}><Trash2 size={14} /></button>
     </div>
   );
@@ -96,7 +114,7 @@ export function TeachersPage() {
                 {users.length === 0 ? <tr><td colSpan={7}><EmptyState /></td></tr>
                   : users.map(u => (
                     <tr key={u.id}>
-                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={u.full_name} size={32} /><div style={{ fontWeight: 600 }}>{u.full_name}</div></div></td>
+                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={u.full_name} size={32} /><div><div style={{ fontWeight: 600 }}>{u.full_name}</div>{u.has_password === false && <div title="Tài khoản chưa có mật khẩu, không đăng nhập được" style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--danger)', fontWeight: 600, marginTop: 2 }}><AlertTriangle size={11} /> Chưa có mật khẩu</div>}</div></div></td>
                       <td style={{ fontSize: 13, color: 'var(--gray-500)' }}>{u.specialization || '—'}</td>
                       <td>{u.phone || '—'}</td>
                       <td>{u.email || '—'}</td>
@@ -170,7 +188,22 @@ export function StaffPage() {
                 {users.length === 0 ? <tr><td colSpan={7}><EmptyState /></td></tr>
                   : users.map(u => (
                     <tr key={u.id}>
-                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={u.full_name} size={32} /><div style={{ fontWeight: 600 }}>{u.full_name}</div></div></td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Avatar name={u.full_name} size={32} />
+                          <div>
+                            <div style={{ fontWeight: 600 }}>
+                              {u.full_name}
+                            </div>
+                            {u.has_password === false && 
+                              <div title="Tài khoản chưa có mật khẩu, không đăng nhập được" 
+                                    style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--danger)', fontWeight: 600, marginTop: 2 }}>
+                                <AlertTriangle size={11} /> Chưa có mật khẩu
+                              </div>
+                            }
+                          </div>
+                        </div>
+                      </td>
                       <td style={{ fontSize: 13, color: 'var(--gray-500)' }}>{u.position || '—'}</td>
                       <td>{u.phone || '—'}</td>
                       <td>{u.email || '—'}</td>
@@ -238,7 +271,7 @@ export function StudentsPage() {
                 {users.length === 0 ? <tr><td colSpan={6}><EmptyState /></td></tr>
                   : users.map(u => (
                     <tr key={u.id}>
-                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={u.full_name} size={32} /><div style={{ fontWeight: 600 }}>{u.full_name}</div></div></td>
+                      <td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar name={u.full_name} size={32} /><div><div style={{ fontWeight: 600 }}>{u.full_name}</div>{u.has_password === false && <div title="Tài khoản chưa có mật khẩu, không đăng nhập được" style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--danger)', fontWeight: 600, marginTop: 2 }}><AlertTriangle size={11} /> Chưa có mật khẩu</div>}</div></div></td>
                       <td>{u.email || '—'}</td>
                       <td>{u.phone || '—'}</td>
                       <td>{u.enrollment_date ? new Date(u.enrollment_date).toLocaleDateString('vi-VN') : '—'}</td>

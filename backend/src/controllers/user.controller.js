@@ -84,6 +84,15 @@ class UserController {
       res.json({ message: 'Xoá tài khoản thành công' });
     } catch (err) { next(err); }
   }
+
+  async resetPassword(req, res, next) {
+    try {
+      const userId = parseInt(req.params.id);
+      const result = await userService.resetPassword(req.tenant.id, userId, req.body?.password);
+      if (!result) return res.status(404).json({ message: 'User not found' });
+      res.json({ message: 'Đã đặt lại mật khẩu', temporaryPassword: result.temporaryPassword });
+    } catch (err) { next(err); }
+  }
 }
 
 

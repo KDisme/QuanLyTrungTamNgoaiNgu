@@ -20,6 +20,7 @@ const feeCtrl = require('../controllers/fee.controller');
 const examCtrl = require('../controllers/exam.controller');
 const homeworkCtrl = require('../controllers/homework.controller');
 const homeworkBankCtrl = require('../controllers/homeworkQuestionBank.controller');
+const notificationCtrl = require('../controllers/notification.controller');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -54,6 +55,7 @@ tenantRouter.get('/users/:id', authenticate, requireSelfOrRole('id', 'admin', 's
 tenantRouter.post('/users', authenticate, requireRole('admin', 'staff'), userCtrl.create);
 tenantRouter.put('/users/:id', authenticate, requireSelfOrRole('id', 'admin', 'staff'), userCtrl.update);
 tenantRouter.patch('/users/:id/toggle-status', authenticate, requireRole('admin'), userCtrl.toggleStatus);
+tenantRouter.post('/users/:id/reset-password', authenticate, requireRole('admin'), userCtrl.resetPassword);
 tenantRouter.delete('/users/:id', authenticate, requireRole('admin'), userCtrl.delete);
 
 // Branches
@@ -166,5 +168,10 @@ tenantRouter.post('/homework-question-bank', authenticate, requireRole('admin', 
 tenantRouter.post('/homework-question-bank/bulk', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.bulkCreate);
 tenantRouter.put('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.update);
 tenantRouter.delete('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.delete);
+
+tenantRouter.get('/notifications', authenticate, notificationCtrl.list);
+tenantRouter.get('/notifications/unread-count', authenticate, notificationCtrl.unreadCount);
+tenantRouter.patch('/notifications/:id/read', authenticate, notificationCtrl.markRead);
+tenantRouter.patch('/notifications/read-all', authenticate, notificationCtrl.markAllRead);
 
 module.exports = router;

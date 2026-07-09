@@ -98,7 +98,19 @@ const statements = [
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS idx_homework_question_bank_tenant ON homework_question_bank(tenant_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_homework_question_bank_category ON homework_question_bank(tenant_id, category)`
+  `CREATE INDEX IF NOT EXISTS idx_homework_question_bank_category ON homework_question_bank(tenant_id, category)`,
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL DEFAULT 'system',
+    title VARCHAR(255) NOT NULL,
+    message TEXT,
+    link VARCHAR(255),
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_notifications_tenant_user ON notifications(tenant_id, user_id, is_read, created_at DESC)`
 ];
 
 async function migrate() {

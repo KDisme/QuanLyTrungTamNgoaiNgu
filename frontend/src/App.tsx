@@ -35,6 +35,7 @@ import ProfilePage from './pages/profile/ProfilePage';
 import StudentAttendancePage from './pages/student/StudentAttendancePage';
 import StudentFeesPage from './pages/student/StudentFeesPage';
 import PlaceholderPage from './pages/student/PlaceholderPage';
+import NotificationsPage from './pages/student/NotificationsPage';
 import { DEFAULT_TENANT_SLUG } from './api';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -180,7 +181,7 @@ function TenantApp() {
         
         <Route path="student/my-results" element={<Navigate to="../dashboard" replace />} />
         <Route path="student/materials" element={<Navigate to="../dashboard" replace />} />
-        <Route path="student/notifications" element={<RoleRoute allow={['student']}><PlaceholderPage title="Thông báo" desc="Thông báo từ giáo viên và hệ thống" /></RoleRoute>} />
+        <Route path="student/notifications" element={<RoleRoute allow={['student']}><NotificationsPage /></RoleRoute>} />
         <Route path="student/profile" element={<RoleRoute allow={['student']}><ProfilePage /></RoleRoute>} />
 
         {/* Legacy URLs: redirect về portal đúng role để tránh vào nhầm layout cũ */}

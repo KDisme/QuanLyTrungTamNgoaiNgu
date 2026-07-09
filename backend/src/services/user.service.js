@@ -52,6 +52,7 @@ class UserService {
 
     const result = await pool.query(
       `SELECT u.id, u.full_name, u.email, u.phone, u.gender, u.is_active, u.created_at,
+              (u.password_hash IS NOT NULL) as has_password,
               array_agg(DISTINCT r.role_type) FILTER (WHERE r.role_type IS NOT NULL) as roles,
               sp.student_code, sp.enrollment_date, sp.study_status,
               tp.teacher_code, tp.specialization, tp.start_date as teacher_start_date,
@@ -91,7 +92,8 @@ class UserService {
     );
 
     if (!result.rows.length) return null;
-    const user = result.rows[0];
+    // const user = result.rows[0];
+    const { password_hash, ...user } = result.rows[0];
 
     const [teacherProfile, studentProfile, staffProfile] = await Promise.all([
       pool.query('SELECT * FROM teacher_profiles WHERE user_id=$1 AND tenant_id=$2', [userId, tenantId]),
@@ -109,6 +111,7 @@ class UserService {
 
     return {
       ...user,
+      has_password: password_hash !== null,
       teacherProfile: teacherProfile.rows[0] || null,
       studentProfile: studentProfile.rows[0] || null,
       staffProfile: staffProfile.rows[0] || null,
@@ -123,7 +126,13 @@ class UserService {
 
       const { fullName, email, phone, gender, dateOfBirth, address, password, roles = [], teacherInfo, studentInfo, staffInfo } = data;
 
-      const passwordHash = password ? await authService.hashPassword(password) : null;
+      // const passwordHash = password ? await authService.hashPassword(password) : null;
+
+      // Never leave password_hash NULL — a NULL hash makes the account permanently unable to log in
+      // with no way for admin to notice until the user tries and fails. Always default it server-side
+      // too, instead of relying solely on the frontend to supply a fallback password.
+      const effectivePassword = (password && String(password).trim()) ? String(password).trim() : 'Default@123';
+      const passwordHash = await authService.hashPassword(effectivePassword);
 
       const userResult = await client.query(
         `INSERT INTO users (tenant_id, full_name, email, phone, gender, date_of_birth, address, password_hash)
@@ -389,6 +398,17 @@ class UserService {
     }
 
     return stats;
+  }
+
+  async resetPassword(tenantId, userId, newPassword) {
+    const password = (newPassword && String(newPassword).trim()) ? String(newPassword).trim() : 'Default@123';
+    const passwordHash = await authService.hashPassword(password);
+    const result = await pool.query(
+      `UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3 RETURNING id`,
+      [passwordHash, userId, tenantId]
+    );
+    if (!result.rows.length) return null;
+    return { id: userId, temporaryPassword: password };
   }
 }
 

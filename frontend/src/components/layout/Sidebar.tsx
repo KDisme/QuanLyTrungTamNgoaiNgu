@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { notificationsApi } from '../../api';
 import { getPrimaryRole, ROLE_LABELS, ROLE_NAV, ROLE_PORTAL_NAMES } from '../../config/roleConfig';
 
 function getInitials(name: string) {
@@ -20,6 +21,18 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const role = getPrimaryRole(user?.roles);
   const navGroups = ROLE_NAV[role];
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const hasNotificationsNav = navGroups.some((group) => group.items.some((item) => item.to.endsWith('notifications')));
+    if (!hasNotificationsNav) return;
+    const fetchUnread = () => {
+      notificationsApi.unreadCount().then((res) => setUnreadCount(res.data.unreadCount || 0)).catch(() => {});
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, [navGroups]);
 
   const handleLogout = () => {
     logout();
@@ -54,6 +67,12 @@ export default function Sidebar() {
               >
                 <item.icon size={16} />
                 {item.label}
+                {item.to.endsWith('notifications') && unreadCount > 0 && (
+                  <span style={{
+                    marginLeft: 'auto', background: 'var(--danger)', color: '#fff', borderRadius: 999,
+                    fontSize: 11, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center',
+                  }}>{unreadCount > 99 ? '99+' : unreadCount}</span>
+                )}
               </NavLink>
             ))}
           </div>

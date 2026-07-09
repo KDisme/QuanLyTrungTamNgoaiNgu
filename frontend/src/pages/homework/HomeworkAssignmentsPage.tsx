@@ -850,7 +850,7 @@ function GradeStudentModal({
                     <div className="form-group">
                       <label className="form-label">Gợi ý chấm</label>
                       <div className="form-input" style={{ minHeight: 42, display: 'flex', alignItems: 'center', color: 'var(--gray-500)' }}>
-                        Ưu tiên chấm nội dung, bố cục, từ vựng và ngữ pháp.
+                        {question.helpText || 'Giáo viên chưa nhập gợi ý chấm cho câu này'}
                       </div>
                     </div>
                   </div>

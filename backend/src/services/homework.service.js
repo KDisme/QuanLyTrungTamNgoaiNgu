@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const bcrypt = require('bcryptjs');
+const notificationService = require('./notification.service');
 
 function toInt(value, fallback) {
   const parsed = parseInt(value, 10);
@@ -411,9 +412,16 @@ class HomeworkService {
       const assignment = assignmentResult.rows[0];
 
       await this._replaceQuestions(client, tenantId, assignment.id, data.questions || []);
-      await this._syncStudents(client, tenantId, assignment.id, data.classId || null, data.studentIds || []);
+      const { allStudentIds } = await this._syncStudents(client, tenantId, assignment.id, data.classId || null, data.studentIds || []);
 
       await client.query('COMMIT');
+
+      if (assignment.status === 'active' && allStudentIds.length) {
+        this._notifyStudentsAssigned(tenantId, assignment, allStudentIds).catch((err) => {
+          console.error('Failed to send homework-assigned notifications:', err);
+        });
+      }
+
       return this.getAssignment(tenantId, assignment.id, user);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -506,11 +514,39 @@ class HomeworkService {
       if (Array.isArray(data.questions)) {
         await this._replaceQuestions(client, tenantId, id, data.questions);
       }
+      let syncResult = null;
       if (data.reassign || Array.isArray(data.studentIds) || data.classId !== undefined) {
-        await this._syncStudents(client, tenantId, id, data.classId || assignmentResult.rows[0].class_id || null, data.studentIds || []);
+        syncResult = await this._syncStudents(client, tenantId, id, data.classId || assignmentResult.rows[0].class_id || null, data.studentIds || []);
       }
 
       await client.query('COMMIT');
+
+      const updatedAssignment = assignmentResult.rows[0];
+      const wasActive = current.rows[0].status === 'active';
+      const becameActive = !wasActive && updatedAssignment.status === 'active';
+
+      if (updatedAssignment.status === 'active') {
+        if (becameActive) {
+          // Just published: notify everyone currently assigned, even if class/students weren't touched this save.
+          const recipientIds = syncResult
+            ? syncResult.allStudentIds
+            : (await pool.query(
+                `SELECT student_id FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2`,
+                [tenantId, id]
+              )).rows.map((row) => Number(row.student_id));
+          if (recipientIds.length) {
+            this._notifyStudentsAssigned(tenantId, updatedAssignment, recipientIds).catch((err) => {
+              console.error('Failed to send homework-assigned notifications:', err);
+            });
+          }
+        } else if (syncResult && syncResult.newlyAddedStudentIds.length) {
+          // Already published, but new students were just added to it (e.g. added to the class).
+          this._notifyStudentsAssigned(tenantId, updatedAssignment, syncResult.newlyAddedStudentIds).catch((err) => {
+            console.error('Failed to send homework-assigned notifications:', err);
+          });
+        }
+      }
+
       return this.getAssignment(tenantId, id, user);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -795,34 +831,45 @@ class HomeworkService {
       classStudents.rows.forEach((row) => ids.add(Number(row.student_id)));
     }
 
-    if (ids.size === 0) {
-      // If no students assigned, delete only those who have not started yet
+    const idsArray = Array.from(ids);
+
+    // Only remove students who are no longer supposed to have this assignment. Previously this
+    // deleted ALL assignment_student rows on every save (even a trivial title edit), which cascades
+    // to delete their homework_submissions too — silently wiping out already-graded work. Now we
+    // only touch the students who actually left the assignment.
+    if (idsArray.length) {
       await client.query(
-        `DELETE FROM homework_assignment_students 
-         WHERE tenant_id=$1 AND assignment_id=$2 AND started_at IS NULL AND submitted_at IS NULL`,
-        [tenantId, assignmentId]
+        `DELETE FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2 AND student_id <> ALL($3::int[])`,
+        [tenantId, assignmentId, idsArray]
       );
-      return;
+    } else {
+      await client.query('DELETE FROM homework_assignment_students WHERE tenant_id=$1 AND assignment_id=$2', [tenantId, assignmentId]);
     }
 
-    // Delete student assignments for students who are NOT in the new list, BUT ONLY if they haven't started/submitted
-    const idArray = Array.from(ids);
-    await client.query(
-      `DELETE FROM homework_assignment_students 
-       WHERE tenant_id=$1 AND assignment_id=$2 AND student_id NOT IN (${idArray.map((_, i) => `$${i + 3}`).join(',')})
-       AND started_at IS NULL AND submitted_at IS NULL`,
-      [tenantId, assignmentId, ...idArray]
-    );
-
-    // Insert new student assignments without overwriting existing ones!
-    for (const studentId of ids) {
-      await client.query(
+    const newlyAddedStudentIds = [];
+    for (const studentId of idsArray) {
+      const result = await client.query(
         `INSERT INTO homework_assignment_students (tenant_id, assignment_id, student_id, status)
-         VALUES ($1, $2, $3, 'assigned')
-         ON CONFLICT (assignment_id, student_id) DO NOTHING`,
+         VALUES ($1,$2,$3,'assigned')
+         ON CONFLICT (assignment_id, student_id) DO NOTHING
+         RETURNING id`,
         [tenantId, assignmentId, studentId]
       );
+      if (result.rows.length) newlyAddedStudentIds.push(studentId);
     }
+    return { allStudentIds: idsArray, newlyAddedStudentIds };
+  }
+
+  async _notifyStudentsAssigned(tenantId, assignment, studentIds) {
+    const dueText = assignment.due_date
+      ? `Hạn nộp: ${new Date(assignment.due_date).toLocaleString('vi-VN')}`
+      : 'Bài tập này không có hạn nộp cố định';
+    await notificationService.createForUsers(tenantId, studentIds, {
+      type: 'homework_assigned',
+      title: `Bài tập mới: ${assignment.title}`,
+      message: dueText,
+      link: `/student/homework/${assignment.id}/take`,
+    });
   }
 }
 

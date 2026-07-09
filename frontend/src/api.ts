@@ -52,6 +52,7 @@ export const usersApi = {
   create: (data: object) => api.post('/users', data),
   update: (id: number, data: object) => api.put(`/users/${id}`, data),
   toggleStatus: (id: number) => api.patch(`/users/${id}/toggle-status`),
+  resetPassword: (id: number, password?: string) => api.post(`/users/${id}/reset-password`, { password }),
   delete: (id: number) => api.delete(`/users/${id}`),
 };
 
@@ -198,4 +199,11 @@ export const homeworkQuestionBankApi = {
   update: (id: number, data: object) => api.put(`/homework-question-bank/${id}`, data),
   delete: (id: number) => api.delete(`/homework-question-bank/${id}`),
   bulkCreate: (data: object) => api.post('/homework-question-bank/bulk', data),
+};
+
+export const notificationsApi = {
+  getAll: (params?: object) => api.get('/notifications', { params }),
+  unreadCount: () => api.get('/notifications/unread-count'),
+  markRead: (id: number) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch('/notifications/read-all'),
 };
