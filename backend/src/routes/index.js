@@ -173,5 +173,6 @@ tenantRouter.get('/notifications', authenticate, notificationCtrl.list);
 tenantRouter.get('/notifications/unread-count', authenticate, notificationCtrl.unreadCount);
 tenantRouter.patch('/notifications/:id/read', authenticate, notificationCtrl.markRead);
 tenantRouter.patch('/notifications/read-all', authenticate, notificationCtrl.markAllRead);
+tenantRouter.get('/homework-assignments/:id/preview', authenticate, homeworkCtrl.getPreview);
 
 module.exports = router;

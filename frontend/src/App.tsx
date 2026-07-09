@@ -37,6 +37,7 @@ import StudentFeesPage from './pages/student/StudentFeesPage';
 import PlaceholderPage from './pages/student/PlaceholderPage';
 import NotificationsPage from './pages/student/NotificationsPage';
 import { DEFAULT_TENANT_SLUG } from './api';
+import HomeworkPreviewPage from './pages/student/HomeworkPreviewPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAuthReady } = useAuth();
@@ -178,6 +179,7 @@ function TenantApp() {
         <Route path="student/my-fees" element={<Navigate to="../dashboard" replace />} />
         <Route path="student/mock-exams" element={<RoleRoute allow={['student']}><MockExamsPage /></RoleRoute>} />
         <Route path="student/homework" element={<RoleRoute allow={['student']}><HomeworkAssignmentsPage /></RoleRoute>} />
+        <Route path="student/homework/:id/preview" element={<RoleRoute allow={['student']}><HomeworkPreviewPage /></RoleRoute>} />
         
         <Route path="student/my-results" element={<Navigate to="../dashboard" replace />} />
         <Route path="student/materials" element={<Navigate to="../dashboard" replace />} />

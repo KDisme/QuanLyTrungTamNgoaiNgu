@@ -191,6 +191,7 @@ export const homeworkApi = {
   delete: (id: number) => api.delete(`/homework-assignments/${id}`),
   submit: (id: number, data: object) => api.post(`/homework-assignments/${id}/submit`, data),
   grade: (submissionId: number, data: object) => api.patch(`/homework-submissions/${submissionId}/grade`, data),
+  getPreview: (id: number) => api.get(`/homework-assignments/${id}/preview`),
 };
 
 export const homeworkQuestionBankApi = {

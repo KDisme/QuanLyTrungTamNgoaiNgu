@@ -370,6 +370,40 @@ class HomeworkService {
     };
   }
 
+  async getAssignmentPreview(tenantId, id, user) {
+    const result = await pool.query(
+      `SELECT a.*, c.name AS class_name,
+        (SELECT COUNT(*) FROM homework_assignment_questions q WHERE q.assignment_id = a.id AND q.tenant_id = a.tenant_id) AS question_count
+      FROM homework_assignments a
+      LEFT JOIN classes c ON c.id = a.class_id
+      WHERE a.id = $1 AND a.tenant_id = $2`,
+      [id, tenantId]
+    );
+    if (!result.rows.length) return null;
+    const assignment = result.rows[0];
+
+    if (isStudentOnly(user)) {
+      const scopeResult = await pool.query(
+        `SELECT status, total_score, submitted_at, feedback
+        FROM homework_assignment_students
+        WHERE tenant_id=$1 AND assignment_id=$2 AND student_id=$3 LIMIT 1`,
+        [tenantId, id, user.id]
+      );
+      if (!scopeResult.rows.length) return null;
+      if (assignment.status === 'draft') return null;
+      const my = scopeResult.rows[0];
+      return {
+        ...camelAssignment(assignment),
+        myStatus: my.status,
+        myTotalScore: assignment.show_score_after_submit ? my.total_score : null,
+        mySubmittedAt: my.submitted_at,
+        myFeedback: assignment.show_score_after_submit ? my.feedback : null,
+      };
+    }
+
+    return camelAssignment(assignment);
+  }
+
   async createAssignment(tenantId, user, data) {
     const client = await pool.connect();
     try {
@@ -868,7 +902,7 @@ class HomeworkService {
       type: 'homework_assigned',
       title: `Bài tập mới: ${assignment.title}`,
       message: dueText,
-      link: `/student/homework/${assignment.id}/take`,
+      link: `/student/homework/${assignment.id}/preview`,
     });
   }
 }

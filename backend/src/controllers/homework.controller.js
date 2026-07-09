@@ -65,6 +65,16 @@ class HomeworkController {
       next(err);
     }
   }
+
+  async getPreview(req, res, next) {
+    try {
+      const item = await homeworkService.getAssignmentPreview(req.tenant.id, parseInt(req.params.id, 10), req.user);
+      if (!item) return res.status(404).json({ message: 'Homework assignment not found' });
+      res.json(item);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = new HomeworkController();
