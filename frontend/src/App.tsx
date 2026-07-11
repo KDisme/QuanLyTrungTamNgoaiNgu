@@ -38,6 +38,7 @@ import PlaceholderPage from './pages/student/PlaceholderPage';
 import NotificationsPage from './pages/student/NotificationsPage';
 import { DEFAULT_TENANT_SLUG } from './api';
 import HomeworkPreviewPage from './pages/student/HomeworkPreviewPage';
+import HomeworkFormPage from './pages/homework/HomeworkFormPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAuthReady } = useAuth();
@@ -98,6 +99,48 @@ function TenantApp() {
         <ProtectedRoute>
           <RoleRoute allow={['student']}>
             <HomeworkTakePage />
+          </RoleRoute>
+        </ProtectedRoute>
+      } />
+      <Route path="admin/homework/create" element={
+        <ProtectedRoute>
+          <RoleRoute allow={['admin']}>
+            <HomeworkFormPage />
+          </RoleRoute>
+        </ProtectedRoute>
+      } />
+      <Route path="admin/homework/:id/edit" element={
+        <ProtectedRoute>
+          <RoleRoute allow={['admin']}>
+            <HomeworkFormPage />
+          </RoleRoute>
+        </ProtectedRoute>
+      } />
+      <Route path="staff/homework/create" element={
+        <ProtectedRoute>
+          <RoleRoute allow={['staff']}>
+            <HomeworkFormPage />
+          </RoleRoute>
+        </ProtectedRoute>
+      } />
+      <Route path="staff/homework/:id/edit" element={
+        <ProtectedRoute>
+          <RoleRoute allow={['staff']}>
+            <HomeworkFormPage />
+          </RoleRoute>
+        </ProtectedRoute>
+      } />
+      <Route path="teacher/homework/create" element={
+        <ProtectedRoute>
+          <RoleRoute allow={['teacher']}>
+            <HomeworkFormPage />
+          </RoleRoute>
+        </ProtectedRoute>
+      } />
+      <Route path="teacher/homework/:id/edit" element={
+        <ProtectedRoute>
+          <RoleRoute allow={['teacher']}>
+            <HomeworkFormPage />
           </RoleRoute>
         </ProtectedRoute>
       } />
