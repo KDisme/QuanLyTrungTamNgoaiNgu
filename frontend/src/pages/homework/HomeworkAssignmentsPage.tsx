@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle, Lock, Timer } from 'lucide-react';
+import { BookOpen, Calendar, Plus, Search, Trash2, Pencil, ClipboardList, FileCheck2, Save, UsersRound, Eye, EyeOff, CheckCircle2, XCircle, Lock, Timer, FileEdit } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { homeworkApi } from '../../api';
 import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '../../components/common';
@@ -540,6 +540,7 @@ export default function HomeworkAssignmentsPage() {
           <div className="stat-card"><div><div className="stat-value">{total}</div><div className="stat-label">BÀI TẬP</div></div><BookOpen color="var(--primary)" /></div>
           <div className="stat-card"><div><div className="stat-value">{stat.active || 0}</div><div className="stat-label">ĐANG MỞ</div></div><ClipboardList color="var(--primary)" /></div>
           <div className="stat-card"><div><div className="stat-value">{stat.closed || 0}</div><div className="stat-label">ĐÃ ĐÓNG</div></div><Calendar color="var(--primary)" /></div>
+          <div className="stat-card"><div><div className="stat-value">{stat.draft || 0}</div><div className="stat-label">NHÁP</div></div><FileEdit color="var(--gray-500)" /></div>
         </div>
       )}
 
