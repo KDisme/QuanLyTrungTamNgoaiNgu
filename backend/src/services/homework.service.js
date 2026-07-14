@@ -15,6 +15,15 @@ function toJson(value, fallback = []) {
   return value;
 }
 
+function shuffleArray(arr) {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 function hasAnyRole(user, roles = []) {
   const userRoles = user?.roles || [];
   return roles.some((role) => userRoles.includes(role));
@@ -55,6 +64,7 @@ function camelAssignment(row) {
     ...safeRow,
     classId: row.class_id,
     className: row.class_name,
+    creatorName: row.creator_name,
     dueDate: row.due_date,
     allowLateSubmission: row.allow_late_submission,
     totalScore: row.total_score,
@@ -342,6 +352,60 @@ class HomeworkService {
       if (!canRevealAnswers) {
         questions = questions.map((question) => ({ ...question, correctAnswer: null }));
       }
+
+      // --- Xáo trộn thứ tự câu hỏi + nội dung đáp án, cố định riêng cho từng học viên ---
+      if (mySubmission) {
+        let questionOrder = toJson(mySubmission.question_order, null);
+        let optionOrders = toJson(mySubmission.option_order, null);
+
+        const validOrder = Array.isArray(questionOrder)
+          && questionOrder.length === questions.length
+          && questions.every((q) => questionOrder.includes(q.id));
+
+        if (!validOrder) {
+          questionOrder = shuffleArray(questions.map((q) => q.id));
+          optionOrders = {};
+          questions.forEach((q) => {
+            if (q.questionType === 'multiple_choice_4' && Array.isArray(q.options) && q.options.length) {
+              // Vị trí A/B/C/D giữ nguyên. Ta chỉ xáo trộn xem NỘI DUNG của label gốc nào
+              // sẽ được đặt vào từng vị trí đó.
+              const originalLabels = q.options.map((o) => o.label);
+              optionOrders[q.id] = shuffleArray(originalLabels);
+            }
+          });
+          await pool.query(
+            `UPDATE homework_assignment_students SET question_order=$1::jsonb, option_order=$2::jsonb, updated_at=NOW() WHERE id=$3 AND tenant_id=$4`,
+            [JSON.stringify(questionOrder), JSON.stringify(optionOrders), mySubmission.assignmentStudentId, tenantId]
+          );
+        }
+
+        const questionMap = new Map(questions.map((q) => [Number(q.id), q]));
+        questions = questionOrder.map((qid) => questionMap.get(Number(qid))).filter(Boolean);
+
+        questions = questions.map((q) => {
+          const mapping = optionOrders ? optionOrders[q.id] : null; // ví dụ ['C','A','D','B']
+          if (Array.isArray(mapping) && Array.isArray(q.options) && mapping.length === q.options.length) {
+            const positionLabels = q.options.map((o) => o.label); // ['A','B','C','D'] — vị trí cố định
+            const originalByLabel = new Map(q.options.map((o) => [o.label, o]));
+            // Vị trí A hiển thị nội dung của label mapping[0], vị trí B hiển thị nội dung của mapping[1], ...
+            const reorderedOptions = positionLabels.map((posLabel, idx) => {
+              const origOption = originalByLabel.get(mapping[idx]);
+              return { label: posLabel, text: origOption ? origOption.text : '' };
+            });
+
+            // Nếu được phép xem đáp án, phải đổi đáp án đúng từ "label gốc" sang "vị trí hiện tại"
+            let remappedCorrectAnswer = q.correctAnswer;
+            if (q.correctAnswer) {
+              const posIndex = mapping.indexOf(q.correctAnswer);
+              remappedCorrectAnswer = posIndex >= 0 ? positionLabels[posIndex] : q.correctAnswer;
+            }
+
+            return { ...q, options: reorderedOptions, correctAnswer: remappedCorrectAnswer };
+          }
+          return q;
+        });
+      }
+
       if (mySubmission) {
         const stripAnswer = (answer) => {
           const rest = { ...(answer || {}) };
@@ -372,10 +436,11 @@ class HomeworkService {
 
   async getAssignmentPreview(tenantId, id, user) {
     const result = await pool.query(
-      `SELECT a.*, c.name AS class_name,
+      `SELECT a.*, c.name AS class_name, creator.full_name AS creator_name,
         (SELECT COUNT(*) FROM homework_assignment_questions q WHERE q.assignment_id = a.id AND q.tenant_id = a.tenant_id) AS question_count
       FROM homework_assignments a
       LEFT JOIN classes c ON c.id = a.class_id
+      LEFT JOIN users creator ON creator.id = a.created_by
       WHERE a.id = $1 AND a.tenant_id = $2`,
       [id, tenantId]
     );
@@ -649,6 +714,7 @@ class HomeworkService {
         [tenantId, assignmentId]
       );
       const questionMap = new Map(questionsResult.rows.map((row) => [Number(row.id), row]));
+      const myOptionOrders = toJson(assignmentStudent.option_order, {}); // mapping riêng của học viên này
       const answerItems = Array.isArray(payload?.answers) ? payload.answers : [];
       const storedAnswers = [];
       let totalScore = 0;
@@ -673,8 +739,20 @@ class HomeworkService {
           isCorrect = expected === actual;
           totalScore += isCorrect ? score : 0;
         } else if (questionType === 'multiple_choice_4') {
+          // Học viên chọn theo "vị trí hiển thị" (A/B/C/D cố định), cần giải mã về label gốc trước khi so sánh
+          const mapping = myOptionOrders ? myOptionOrders[questionId] : null; // ví dụ ['C','A','D','B']
+          const options = toJson(question.options, []);
+          const positionLabels = options.map((o) => o.label);
+          const chosenPosition = selectedAnswer || answerText;
+
+          let decodedAnswer = chosenPosition;
+          if (Array.isArray(mapping) && mapping.length === positionLabels.length) {
+            const posIndex = positionLabels.indexOf(String(chosenPosition).toUpperCase());
+            if (posIndex >= 0) decodedAnswer = mapping[posIndex];
+          }
+
           const expected = normalizeAnswerValue(question.correct_answer);
-          const actual = normalizeAnswerValue(selectedAnswer || answerText);
+          const actual = normalizeAnswerValue(decodedAnswer);
           isCorrect = expected === actual;
           totalScore += isCorrect ? score : 0;
         }

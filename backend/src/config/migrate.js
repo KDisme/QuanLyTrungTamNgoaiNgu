@@ -64,6 +64,8 @@ const statements = [
     UNIQUE (assignment_id, student_id)
   )`,
   `ALTER TABLE homework_assignment_students ADD COLUMN IF NOT EXISTS started_at TIMESTAMP NULL`,
+  `ALTER TABLE homework_assignment_students ADD COLUMN IF NOT EXISTS question_order JSONB`,
+  `ALTER TABLE homework_assignment_students ADD COLUMN IF NOT EXISTS option_order JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignment_students_assignment ON homework_assignment_students(tenant_id, assignment_id)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_assignment_students_student ON homework_assignment_students(tenant_id, student_id)`,
   `CREATE TABLE IF NOT EXISTS homework_submissions (

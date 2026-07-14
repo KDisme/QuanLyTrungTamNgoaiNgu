@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock3, FileText, ListChecks, Send } from 'lucide-react';
+import { ArrowLeft, Clock3, FileText, ListChecks, UserRound } from 'lucide-react';
 import { homeworkApi } from '../../api';
 import { EmptyState, Loading, StatusBadge, Badge } from '../../components/common';
 
@@ -51,6 +51,12 @@ export default function HomeworkPreviewPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gray-600)' }}>
             <ListChecks size={16} /> Số câu hỏi: <b>{detail.questionCount || 0}</b>
           </div>
+          {detail.creatorName && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gray-600)' }}>
+              <UserRound size={16} />
+              {detail.creatorRole === 'admin' ? 'Người tạo bài (Admin):' : 'Giáo viên tạo bài:'} <b>{detail.creatorName}</b>
+            </div>
+          )}
           {detail.myTotalScore != null && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gray-600)' }}>
               <FileText size={16} /> Điểm của bạn: <b>{detail.myTotalScore} / {detail.totalScore ?? 100}</b>
@@ -65,11 +71,6 @@ export default function HomeworkPreviewPage() {
         )}
       </section>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn btn-primary" onClick={() => navigate('../../homework')}>
-          <Send size={14} /> Đi tới Bài tập về nhà
-        </button>
-      </div>
     </div>
   );
 }
