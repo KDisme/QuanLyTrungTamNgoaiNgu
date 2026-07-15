@@ -17,6 +17,7 @@ const branchCtrl = require('../controllers/branch.controller');
 const classCtrl = require('../controllers/class.controller');
 const { scheduleController: schedCtrl, attendanceController: attendCtrl } = require('../controllers/schedule.controller');
 const feeCtrl = require('../controllers/fee.controller');
+const dashboardCtrl = require('../controllers/dashboard.controller');
 const examCtrl = require('../controllers/exam.controller');
 const homeworkCtrl = require('../controllers/homework.controller');
 const homeworkBankCtrl = require('../controllers/homeworkQuestionBank.controller');
@@ -152,7 +153,7 @@ tenantRouter.post('/mock-exam-students/:mockExamStudentId/submit', authenticate,
 tenantRouter.patch('/mock-exam-students/:mockExamStudentId/grade', authenticate, requireRole('admin', 'staff', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.gradeStudent);
 
 // Dashboard
-tenantRouter.get('/dashboard', authenticate, feeCtrl.getDashboard);
+tenantRouter.get('/dashboard', authenticate, dashboardCtrl.getStats);
 
 // Homework assignments
 tenantRouter.get('/homework-assignments', authenticate, homeworkCtrl.list);

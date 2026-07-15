@@ -53,8 +53,7 @@ export default function HomeworkPreviewPage() {
           </div>
           {detail.creatorName && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gray-600)' }}>
-              <UserRound size={16} />
-              {detail.creatorRole === 'admin' ? 'Người tạo bài (Admin):' : 'Giáo viên tạo bài:'} <b>{detail.creatorName}</b>
+              <UserRound size={16} /> {detail.creatorLabel || 'Người tạo bài'}: <b>{detail.creatorName}</b>
             </div>
           )}
           {detail.myTotalScore != null && (

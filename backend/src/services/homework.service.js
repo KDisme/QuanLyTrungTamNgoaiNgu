@@ -60,11 +60,17 @@ function camelQuestion(row) {
 function camelAssignment(row) {
   if (!row) return row;
   const { password_hash, ...safeRow } = row;
+  const creatorRoles = (row.creator_roles || []).filter(Boolean);
+  const creatorIsAdmin = creatorRoles.includes('admin');
   return {
     ...safeRow,
     classId: row.class_id,
     className: row.class_name,
     creatorName: row.creator_name,
+    creatorRoles,
+    creatorLabel: row.creator_name
+      ? (creatorIsAdmin ? 'Người tạo bài (Admin)' : 'Giáo viên tạo bài')
+      : null,
     dueDate: row.due_date,
     allowLateSubmission: row.allow_late_submission,
     totalScore: row.total_score,
@@ -437,6 +443,7 @@ class HomeworkService {
   async getAssignmentPreview(tenantId, id, user) {
     const result = await pool.query(
       `SELECT a.*, c.name AS class_name, creator.full_name AS creator_name,
+        (SELECT array_agg(r.role_type) FROM roles r WHERE r.user_id = a.created_by AND r.tenant_id = a.tenant_id) AS creator_roles,
         (SELECT COUNT(*) FROM homework_assignment_questions q WHERE q.assignment_id = a.id AND q.tenant_id = a.tenant_id) AS question_count
       FROM homework_assignments a
       LEFT JOIN classes c ON c.id = a.class_id
