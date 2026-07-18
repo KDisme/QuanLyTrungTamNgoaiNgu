@@ -38,6 +38,7 @@ const upload = multer({
     cb(Object.assign(new Error('Chỉ cho phép upload hình ảnh, audio hoặc PDF'), { status: 400 }));
   },
 });
+const activityLogCtrl = require('../controllers/activityLog.controller');
 
 // ---- PORTAL (no tenant) ----
 router.post('/portal/find-tenant', authCtrl.portalFindTenant);
@@ -175,5 +176,9 @@ tenantRouter.get('/notifications/unread-count', authenticate, notificationCtrl.u
 tenantRouter.patch('/notifications/:id/read', authenticate, notificationCtrl.markRead);
 tenantRouter.patch('/notifications/read-all', authenticate, notificationCtrl.markAllRead);
 tenantRouter.get('/homework-assignments/:id/preview', authenticate, homeworkCtrl.getPreview);
+
+// Activity logs
+tenantRouter.get('/activity-logs', authenticate, requireRole('admin'), activityLogCtrl.list);
+tenantRouter.get('/activity-logs/actors', authenticate, requireRole('admin'), activityLogCtrl.getActors);
 
 module.exports = router;

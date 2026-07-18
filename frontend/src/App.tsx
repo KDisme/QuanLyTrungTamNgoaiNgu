@@ -39,6 +39,7 @@ import NotificationsPage from './pages/student/NotificationsPage';
 import { DEFAULT_TENANT_SLUG } from './api';
 import HomeworkPreviewPage from './pages/student/HomeworkPreviewPage';
 import HomeworkFormPage from './pages/homework/HomeworkFormPage';
+import ActivityLogPage from './pages/admin/ActivityLogPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAuthReady } = useAuth();
@@ -174,6 +175,7 @@ function TenantApp() {
         <Route path="admin/exam-sets" element={<RoleRoute allow={['admin']}><ExamSetsPage /></RoleRoute>} />
         <Route path="admin/mock-exams" element={<RoleRoute allow={['admin']}><MockExamsPage /></RoleRoute>} />
         <Route path="admin/homework" element={<RoleRoute allow={['admin']}><HomeworkAssignmentsPage /></RoleRoute>} />
+        <Route path="admin/activity-logs" element={<RoleRoute allow={['admin']}><ActivityLogPage /></RoleRoute>} />
         <Route path="admin/tuition" element={<Navigate to="../dashboard" replace />} />
         <Route path="admin/expenses" element={<Navigate to="../dashboard" replace />} />
         <Route path="admin/fee-templates" element={<Navigate to="../dashboard" replace />} />

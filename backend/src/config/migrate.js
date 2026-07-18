@@ -112,7 +112,26 @@ const statements = [
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_notifications_tenant_user ON notifications(tenant_id, user_id, is_read, created_at DESC)`
+  `CREATE INDEX IF NOT EXISTS idx_notifications_tenant_user ON notifications(tenant_id, user_id, is_read, created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS activity_logs (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_name VARCHAR(255),
+    actor_role VARCHAR(30),
+    action_type VARCHAR(30) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id INTEGER,
+    entity_name VARCHAR(255),
+    description TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_activity_logs_tenant_created ON activity_logs(tenant_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_activity_logs_actor ON activity_logs(tenant_id, actor_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_activity_logs_entity ON activity_logs(tenant_id, entity_type, entity_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(tenant_id, action_type)`
 ];
 
 async function migrate() {

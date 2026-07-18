@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const activityLogService = require('./activityLog.service');
 
 class ClassService {
   async getNextCode(tenantId) {
@@ -119,7 +120,7 @@ class ClassService {
     };
   }
 
-  async create(tenantId, data) {
+  async create(tenantId, data, user) {
     const { name, branchId, classType = 'fixed', maxStudents = 20, expectedFee = 0,
             startDate, expectedSessions, description, teacherIds = [], status = 'upcoming', weeklySchedules = [] } = data;
     const normalizedSeedDate = classType === 'fixed' ? this._normalizeDateOnly(startDate) : null;
@@ -169,6 +170,15 @@ class ClassService {
       }
 
       await client.query('COMMIT');
+
+      activityLogService.log(tenantId, user, {
+        actionType: 'create',
+        entityType: 'class',
+        entityId: cls.id,
+        entityName: cls.name,
+        description: `đã tạo lớp học "${cls.name}" (${cls.code})`,
+      }).catch((err) => console.error('Failed to log class creation:', err));
+
       return cls;
     } catch (err) {
       await client.query('ROLLBACK');
@@ -178,7 +188,7 @@ class ClassService {
     }
   }
 
-  async update(tenantId, classId, data) {
+  async update(tenantId, classId, data, user) {
     const { name, branchId, classType, maxStudents, expectedFee, startDate, expectedSessions, status, description, weeklySchedules, teacherIds } = data;
     this._validateClassPayload(data);
 
@@ -231,6 +241,15 @@ class ClassService {
       }
 
       await client.query('COMMIT');
+
+      activityLogService.log(tenantId, user, {
+        actionType: 'update',
+        entityType: 'class',
+        entityId: classId,
+        entityName: result.rows[0].name,
+        description: `đã cập nhật thông tin lớp học "${result.rows[0].name}"`,
+      }).catch((err) => console.error('Failed to log class update:', err));
+
       return result.rows[0];
     } catch (err) {
       await client.query('ROLLBACK');
@@ -240,8 +259,19 @@ class ClassService {
     }
   }
 
-  async delete(tenantId, classId) {
+  async delete(tenantId, classId, user) {
+    const info = await pool.query('SELECT name, code FROM classes WHERE id=$1 AND tenant_id=$2', [classId, tenantId]);
     await pool.query('DELETE FROM classes WHERE id=$1 AND tenant_id=$2', [classId, tenantId]);
+
+    if (info.rows.length) {
+      activityLogService.log(tenantId, user, {
+        actionType: 'delete',
+        entityType: 'class',
+        entityId: classId,
+        entityName: info.rows[0].name,
+        description: `đã xoá lớp học "${info.rows[0].name}" (${info.rows[0].code})`,
+      }).catch((err) => console.error('Failed to log class deletion:', err));
+    }
   }
 
   async addStudent(tenantId, classId, studentId) {

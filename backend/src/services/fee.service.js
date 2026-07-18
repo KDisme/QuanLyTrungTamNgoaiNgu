@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const activityLogService = require('./activityLog.service');
 
 class FeeService {
   // ---- FEE TEMPLATES ----
@@ -127,7 +128,7 @@ class FeeService {
     return { ...collection, classes: classesResult.rows, items: items.rows };
   }
 
-  async createCollection(tenantId, data, userId) {
+  async createCollection(tenantId, data, userId, user) {
     const {
       name, feeTemplateId, cycleType = 'monthly', description,
       startDate, endDate, graceDays = 7, dueDate,
@@ -139,7 +140,6 @@ class FeeService {
     try {
       await client.query('BEGIN');
 
-      // Generate collection code
       let collectionCode;
       try {
         const codeRes = await client.query('SELECT generate_collection_code($1) as code', [tenantId]);
@@ -150,7 +150,6 @@ class FeeService {
         collectionCode = `HP-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(cnt.rows[0].n).padStart(4,'0')}`;
       }
 
-      // Resolve amount from template or direct
       let amount = parseFloat(totalAmount) || 0;
       if (feeTemplateId && !amount) {
         const tmpl = await client.query('SELECT amount FROM fee_templates WHERE id=$1', [feeTemplateId]);
@@ -168,7 +167,6 @@ class FeeService {
       );
       const collection = result.rows[0];
 
-      // Link classes
       for (const classId of (classIds || [])) {
         await client.query(
           'INSERT INTO fee_collection_classes (tenant_id, collection_id, class_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
@@ -177,6 +175,16 @@ class FeeService {
       }
 
       await client.query('COMMIT');
+
+      activityLogService.log(tenantId, user, {
+        actionType: 'create',
+        entityType: 'fee_collection',
+        entityId: collection.id,
+        entityName: collection.name,
+        description: `đã tạo đợt thu học phí "${collection.name}" (${collection.collection_code})`,
+        metadata: { totalAmount: amount, scopeType, classIds },
+      }).catch((err) => console.error('Failed to log fee collection creation:', err));
+
       return collection;
     } catch (err) {
       await client.query('ROLLBACK');
@@ -261,7 +269,7 @@ class FeeService {
   }
 
   // ---- TRANSACTIONS ----
-  async recordPayment(tenantId, itemId, data, userId) {
+  async recordPayment(tenantId, itemId, data, userId, user) {
     const { amount, paymentMethod = 'cash', note, paidDate } = data;
     const client = await pool.connect();
     try {
@@ -299,6 +307,26 @@ class FeeService {
       );
 
       await client.query('COMMIT');
+
+      const studentInfo = await pool.query(
+        `SELECT u.full_name, fc.name AS collection_name
+         FROM fee_collection_items fci
+         JOIN users u ON u.id = fci.student_id
+         JOIN fee_collections fc ON fc.id = fci.collection_id
+         WHERE fci.id = $1`,
+        [itemId]
+      );
+      const info = studentInfo.rows[0] || {};
+
+      activityLogService.log(tenantId, user, {
+        actionType: 'payment',
+        entityType: 'fee_transaction',
+        entityId: txResult.rows[0].id,
+        entityName: info.collection_name || null,
+        description: `đã ghi nhận thanh toán ${Number(amount).toLocaleString('vi-VN')}đ cho học viên "${info.full_name || ''}" - đợt thu "${info.collection_name || ''}"`,
+        metadata: { amount, paymentMethod, itemId },
+      }).catch((err) => console.error('Failed to log fee payment:', err));
+
       return { transaction: txResult.rows[0], item: itemResult.rows[0] };
     } catch (err) {
       await client.query('ROLLBACK');
@@ -308,7 +336,7 @@ class FeeService {
     }
   }
 
-  async cancelTransaction(tenantId, transactionId, userId) {
+  async cancelTransaction(tenantId, transactionId, userId, user) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -341,6 +369,16 @@ class FeeService {
       );
 
       await client.query('COMMIT');
+
+      activityLogService.log(tenantId, user, {
+        actionType: 'delete',
+        entityType: 'fee_transaction',
+        entityId: transactionId,
+        entityName: null,
+        description: `đã huỷ giao dịch thanh toán ${Number(tx.amount).toLocaleString('vi-VN')}đ`,
+        metadata: { amount: tx.amount, itemId: tx.item_id },
+      }).catch((err) => console.error('Failed to log transaction cancellation:', err));
+
       return txResult.rows[0];
     } catch (err) {
       await client.query('ROLLBACK');

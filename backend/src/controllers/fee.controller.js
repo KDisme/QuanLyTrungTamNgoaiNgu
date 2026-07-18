@@ -25,7 +25,7 @@ class FeeController {
     } catch (err) { next(err); }
   }
   async createCollection(req, res, next) {
-    try { res.status(201).json(await feeService.createCollection(req.tenant.id, req.body, req.user.id)); } catch (err) { next(err); }
+    try { res.status(201).json(await feeService.createCollection(req.tenant.id, req.body, req.user.id, req.user)); } catch (err) { next(err); }
   }
   async activateCollection(req, res, next) {
     try { res.json(await feeService.activateCollection(req.tenant.id, parseInt(req.params.id))); } catch (err) { next(err); }
@@ -41,12 +41,12 @@ class FeeController {
   async recordPayment(req, res, next) {
     try {
       res.status(201).json(
-        await feeService.recordPayment(req.tenant.id, parseInt(req.params.itemId), req.body, req.user.id)
+        await feeService.recordPayment(req.tenant.id, parseInt(req.params.itemId), req.body, req.user.id, req.user)
       );
     } catch (err) { next(err); }
   }
   async cancelTransaction(req, res, next) {
-    try { res.json(await feeService.cancelTransaction(req.tenant.id, parseInt(req.params.id), req.user.id)); } catch (err) { next(err); }
+    try { res.json(await feeService.cancelTransaction(req.tenant.id, parseInt(req.params.id), req.user.id, req.user)); } catch (err) { next(err); }
   }
   async getTransactionHistory(req, res, next) {
     try {

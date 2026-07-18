@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, UserCheck,
   BookOpen, Calendar, ClipboardList, FileText,
   Settings, Briefcase, HelpCircle, ClipboardCheck, UserCircle,
-  Bell
+  Bell, History
 } from 'lucide-react';
 
 export type RoleType = 'admin' | 'staff' | 'teacher' | 'student';
@@ -73,6 +73,12 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'admin/exam-sets', label: 'Bộ đề thi', icon: FileText },
         { to: 'admin/mock-exams', label: 'Kỳ thi thử', icon: ClipboardCheck },
         { to: 'admin/homework', label: 'Bài tập về nhà', icon: FileText },
+      ],
+    },
+    {
+      section: 'HỆ THỐNG',
+      items: [
+        { to: 'admin/activity-logs', label: 'Lịch sử hoạt động', icon: History },
       ],
     },
   ],

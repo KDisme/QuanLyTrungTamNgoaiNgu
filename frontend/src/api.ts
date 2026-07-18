@@ -208,3 +208,8 @@ export const notificationsApi = {
   markRead: (id: number) => api.patch(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
 };
+
+export const activityLogApi = {
+  getAll: (params?: object) => api.get('/activity-logs', { params }),
+  getActors: () => api.get('/activity-logs/actors'),
+};

@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const authService = require('./auth.service');
+const activityLogService = require('./activityLog.service');
 
 class UserService {
   async getAll(tenantId, { role, status, search, branchId, page = 1, limit = 20 }) {
@@ -119,7 +120,7 @@ class UserService {
     };
   }
 
-  async create(tenantId, data) {
+  async create(tenantId, data, actor) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -176,6 +177,15 @@ class UserService {
       }
 
       await client.query('COMMIT');
+
+      activityLogService.log(tenantId, actor, {
+        actionType: 'create',
+        entityType: 'user',
+        entityId: user.id,
+        entityName: user.full_name,
+        description: `đã tạo tài khoản "${user.full_name}" (${(data.roles || []).join(', ')})`,
+      }).catch((err) => console.error('Failed to log user creation:', err));
+
       return this.getById(tenantId, user.id);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -185,7 +195,7 @@ class UserService {
     }
   }
 
-  async update(tenantId, userId, data) {
+  async update(tenantId, userId, data, actor) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -213,6 +223,18 @@ class UserService {
          WHERE id=$8 AND tenant_id=$9`,
         [fullName, email, phone, gender, dateOfBirth || null, address, isActive, userId, tenantId]
       );
+
+      if (current.is_active !== isActive) {
+        activityLogService.log(tenantId, actor, {
+          actionType: 'update',
+          entityType: 'user',
+          entityId: userId,
+          entityName: fullName,
+          description: isActive
+            ? `đã mở khoá tài khoản "${fullName}"`
+            : `đã khoá tài khoản "${fullName}"`,
+        }).catch((err) => console.error('Failed to log user status change:', err));
+      }
 
       if (Array.isArray(data.roles)) {
         const roles = [...new Set(data.roles)].filter((role) => ['admin', 'teacher', 'student', 'staff'].includes(role));
@@ -311,6 +333,15 @@ class UserService {
       }
 
       await client.query('COMMIT');
+
+      activityLogService.log(tenantId, actor, {
+        actionType: 'update',
+        entityType: 'user',
+        entityId: userId,
+        entityName: fullName,
+        description: `đã cập nhật hồ sơ tài khoản "${fullName}"`,
+      }).catch((err) => console.error('Failed to log user update:', err));
+
       return this.getById(tenantId, userId);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -320,11 +351,23 @@ class UserService {
     }
   }
 
-  async delete(tenantId, userId) {
+  async delete(tenantId, userId, actor) {
+    const info = await pool.query('SELECT full_name FROM users WHERE id=$1 AND tenant_id=$2', [userId, tenantId]);
     const result = await pool.query(
       'DELETE FROM users WHERE id=$1 AND tenant_id=$2 RETURNING id',
       [userId, tenantId]
     );
+
+    if (result.rowCount > 0 && info.rows.length) {
+      activityLogService.log(tenantId, actor, {
+        actionType: 'delete',
+        entityType: 'user',
+        entityId: userId,
+        entityName: info.rows[0].full_name,
+        description: `đã xoá tài khoản "${info.rows[0].full_name}"`,
+      }).catch((err) => console.error('Failed to log user deletion:', err));
+    }
+
     return result.rowCount > 0;
   }
 
@@ -400,14 +443,24 @@ class UserService {
     return stats;
   }
 
-  async resetPassword(tenantId, userId, newPassword) {
+  async resetPassword(tenantId, userId, newPassword, actor) {
     const password = (newPassword && String(newPassword).trim()) ? String(newPassword).trim() : 'Default@123';
     const passwordHash = await authService.hashPassword(password);
     const result = await pool.query(
-      `UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3 RETURNING id`,
+      `UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3 RETURNING id, full_name`,
       [passwordHash, userId, tenantId]
     );
     if (!result.rows.length) return null;
+
+    activityLogService.log(tenantId, actor, {
+      actionType: 'update',
+      entityType: 'user',
+      entityId: userId,
+      entityName: result.rows[0].full_name,
+      description: `đã đặt lại mật khẩu cho tài khoản "${result.rows[0].full_name}"`,
+      // Cố ý KHÔNG lưu mật khẩu thật vào metadata
+    }).catch((err) => console.error('Failed to log password reset:', err));
+
     return { id: userId, temporaryPassword: password };
   }
 }

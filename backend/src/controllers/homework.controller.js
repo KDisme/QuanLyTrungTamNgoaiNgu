@@ -58,7 +58,7 @@ class HomeworkController {
 
   async grade(req, res, next) {
     try {
-      const item = await homeworkService.gradeSubmission(req.tenant.id, parseInt(req.params.submissionId, 10), req.user.id, req.body);
+      const item = await homeworkService.gradeSubmission(req.tenant.id, parseInt(req.params.submissionId, 10), req.user, req.body);
       if (!item) return res.status(404).json({ message: 'Homework submission not found' });
       res.json(item);
     } catch (err) {

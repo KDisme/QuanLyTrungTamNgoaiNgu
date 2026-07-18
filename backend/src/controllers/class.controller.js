@@ -31,7 +31,7 @@ class ClassController {
 
   async create(req, res, next) {
     try {
-      const cls = await classService.create(req.tenant.id, req.body);
+      const cls = await classService.create(req.tenant.id, req.body, req.user);
       res.status(201).json(cls);
     } catch (err) {
       if (err.code === 'VALIDATION_ERROR') return res.status(422).json({ message: err.message });
@@ -41,7 +41,7 @@ class ClassController {
 
   async update(req, res, next) {
     try {
-      const cls = await classService.update(req.tenant.id, parseInt(req.params.id), req.body);
+      const cls = await classService.update(req.tenant.id, parseInt(req.params.id), req.body, req.user);
       if (!cls) return res.status(404).json({ message: 'Class not found' });
       res.json(cls);
     } catch (err) {
@@ -52,7 +52,7 @@ class ClassController {
 
   async delete(req, res, next) {
     try {
-      await classService.delete(req.tenant.id, parseInt(req.params.id));
+      await classService.delete(req.tenant.id, parseInt(req.params.id), req.user);
       res.json({ message: 'Deleted successfully' });
     } catch (err) { next(err); }
   }

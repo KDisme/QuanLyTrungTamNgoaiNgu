@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { getFormat, getBlueprintRule, EXAM_FORMATS } = require('../config/exam.config');
+const activityLogService = require('./activityLog.service');
 
 function toInt(value, fallback) {
   const n = parseInt(value, 10);
@@ -783,7 +784,7 @@ class ExamService {
     } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
   }
 
-  async gradeStudent(tenantId, mockExamStudentId, data, graderId) {
+  async gradeStudent(tenantId, mockExamStudentId, data, graderId, actor) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -883,6 +884,26 @@ class ExamService {
         [manualScore, totalScore, overallScore, JSON.stringify(skillScores), data.feedback || null, mockExamStudentId, tenantId]
       );
       await client.query('COMMIT');
+
+      const info = await pool.query(
+        `SELECT u.full_name AS student_name, m.title
+         FROM mock_exam_students ms
+         JOIN users u ON u.id = ms.student_id
+         JOIN mock_exams m ON m.id = ms.mock_exam_id
+         WHERE ms.id = $1 AND ms.tenant_id = $2`,
+        [mockExamStudentId, tenantId]
+      );
+      const meta = info.rows[0] || {};
+
+      activityLogService.log(tenantId, actor, {
+        actionType: 'grade',
+        entityType: 'mock_exam_student',
+        entityId: mockExamStudentId,
+        entityName: meta.title || null,
+        description: `đã chấm bài thi "${meta.title || ''}" của học viên "${meta.student_name || ''}" - ${result.rows[0]?.total_score ?? ''} điểm`,
+        metadata: { totalScore: result.rows[0]?.total_score, feedback: data.feedback || null },
+      }).catch((err) => console.error('Failed to log exam grading:', err));
+
       return result.rows[0] || null;
     } catch (err) {
       await client.query('ROLLBACK');

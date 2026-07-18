@@ -19,7 +19,7 @@ class UserController {
 
   async create(req, res, next) {
     try {
-      const user = await userService.create(req.tenant.id, req.body);
+      const user = await userService.create(req.tenant.id, req.body, req.user);
       res.status(201).json(user);
     } catch (err) {
       if (err.code === '23505') {
@@ -45,7 +45,7 @@ class UserController {
         }
       }
 
-      const user = await userService.update(req.tenant.id, userId, req.body);
+      const user = await userService.update(req.tenant.id, userId, req.body, req.user);
       if (!user) return res.status(404).json({ message: 'User not found' });
       res.json(user);
     } catch (err) {
@@ -67,7 +67,7 @@ class UserController {
       if (!user) return res.status(404).json({ message: 'User not found' });
       const updated = await userService.update(req.tenant.id, userId, {
         ...user, isActive: !user.is_active
-      });
+      }, req.user);
       res.json(updated);
     } catch (err) { next(err); }
   }
@@ -79,7 +79,7 @@ class UserController {
         return res.status(400).json({ message: 'Không thể xoá chính tài khoản đang đăng nhập' });
       }
 
-      const deleted = await userService.delete(req.tenant.id, userId);
+      const deleted = await userService.delete(req.tenant.id, userId, req.user);
       if (!deleted) return res.status(404).json({ message: 'User not found' });
       res.json({ message: 'Xoá tài khoản thành công' });
     } catch (err) { next(err); }
@@ -88,7 +88,7 @@ class UserController {
   async resetPassword(req, res, next) {
     try {
       const userId = parseInt(req.params.id);
-      const result = await userService.resetPassword(req.tenant.id, userId, req.body?.password);
+      const result = await userService.resetPassword(req.tenant.id, userId, req.body?.password, req.user);
       if (!result) return res.status(404).json({ message: 'User not found' });
       res.json({ message: 'Đã đặt lại mật khẩu', temporaryPassword: result.temporaryPassword });
     } catch (err) { next(err); }

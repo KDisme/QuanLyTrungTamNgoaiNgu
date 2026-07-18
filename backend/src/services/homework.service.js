@@ -1,6 +1,7 @@
 const pool = require('../config/database');
 const bcrypt = require('bcryptjs');
 const notificationService = require('./notification.service');
+const activityLogService = require('./activityLog.service');
 
 function toInt(value, fallback) {
   const parsed = parseInt(value, 10);
@@ -528,6 +529,23 @@ class HomeworkService {
         });
       }
 
+      let className = null;
+      if (data.classId) {
+        const classInfo = await pool.query('SELECT name FROM classes WHERE id=$1 AND tenant_id=$2', [data.classId, tenantId]);
+        className = classInfo.rows[0]?.name || null;
+      }
+
+      activityLogService.log(tenantId, user, {
+        actionType: 'create',
+        entityType: 'homework',
+        entityId: assignment.id,
+        entityName: assignment.title,
+        description: className
+          ? `đã tạo bài tập "${assignment.title}" cho lớp "${className}"`
+          : `đã tạo bài tập "${assignment.title}" (chưa gán lớp)`,
+        metadata: { classId: data.classId || null, className, status: assignment.status },
+      }).catch((err) => console.error('Failed to log homework creation:', err));
+
       return this.getAssignment(tenantId, assignment.id, user);
     } catch (err) {
       await client.query('ROLLBACK');
@@ -652,6 +670,13 @@ class HomeworkService {
           });
         }
       }
+      activityLogService.log(tenantId, user, {
+        actionType: 'update',
+        entityType: 'homework',
+        entityId: id,
+        entityName: updatedAssignment.title,
+        description: `đã cập nhật bài tập "${updatedAssignment.title}"`,
+      }).catch((err) => console.error('Failed to log homework update:', err));
 
       return this.getAssignment(tenantId, id, user);
     } catch (err) {
@@ -663,13 +688,21 @@ class HomeworkService {
   }
 
   async deleteAssignment(tenantId, id, user = null) {
-    const assignment = await pool.query('SELECT class_id FROM homework_assignments WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
+    const assignment = await pool.query('SELECT class_id, title FROM homework_assignments WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
     if (!assignment.rows.length) return;
     if (isTeacherOnly(user)) {
       const allowed = await pool.query('SELECT 1 FROM class_teachers WHERE tenant_id=$1 AND class_id=$2 AND teacher_id=$3 LIMIT 1', [tenantId, assignment.rows[0].class_id, user.id]);
       if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể xoá bài tập của lớp mình phụ trách'), { status: 403 });
     }
     await pool.query('DELETE FROM homework_assignments WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
+
+    activityLogService.log(tenantId, user, {
+      actionType: 'delete',
+      entityType: 'homework',
+      entityId: id,
+      entityName: assignment.rows[0].title,
+      description: `đã xoá bài tập "${assignment.rows[0].title}"`,
+    }).catch((err) => console.error('Failed to log homework deletion:', err));
   }
 
   async submitAssignment(tenantId, assignmentId, studentId, payload) {
@@ -819,7 +852,8 @@ class HomeworkService {
     }
   }
 
-  async gradeSubmission(tenantId, submissionId, userId, data) {
+  async gradeSubmission(tenantId, submissionId, actor, data) {
+    const userId = actor?.id || actor; // hỗ trợ cả trường hợp truyền thẳng id cũ
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -888,8 +922,32 @@ class HomeworkService {
          WHERE id=$4 AND tenant_id=$5`,
         [studentStatus, score, feedback, submission.assignment_student_id, tenantId]
       );
+      const assignmentInfo = await client.query(
+        `SELECT ha.title, u.full_name AS student_name
+         FROM homework_assignment_students has
+         JOIN homework_assignments ha ON ha.id = has.assignment_id
+         JOIN users u ON u.id = has.student_id
+         WHERE has.id = $1 AND has.tenant_id = $2`,
+        [submission.assignment_student_id, tenantId]
+      );
 
       await client.query('COMMIT');
+      const info = assignmentInfo.rows[0] || {};
+      activityLogService.log(tenantId, actor, {
+        actionType: requestRevision ? 'update' : 'grade',
+        entityType: 'homework_submission',
+        entityId: submissionId,
+        entityName: info.title || null,
+        description: requestRevision
+          ? `đã yêu cầu học viên "${info.student_name || ''}" làm lại bài "${info.title || ''}"`
+          : `đã chấm bài "${info.title || ''}" của học viên "${info.student_name || ''}" - ${score} điểm`,
+        metadata: {
+          previousScore: Number(submission.total_score || 0),
+          newScore: score,
+          studentName: info.student_name,
+          homeworkTitle: info.title,
+        },
+      }).catch((err) => console.error('Failed to log grade activity:', err));
       return updatedSubmission.rows[0];
     } catch (err) {
       await client.query('ROLLBACK');
