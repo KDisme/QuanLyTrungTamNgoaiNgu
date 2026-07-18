@@ -131,7 +131,29 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS idx_activity_logs_tenant_created ON activity_logs(tenant_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_activity_logs_actor ON activity_logs(tenant_id, actor_id)`,
   `CREATE INDEX IF NOT EXISTS idx_activity_logs_entity ON activity_logs(tenant_id, entity_type, entity_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(tenant_id, action_type)`
+  `CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(tenant_id, action_type)`,
+
+  `CREATE TABLE IF NOT EXISTS homework_assignment_classes (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    assignment_id INTEGER NOT NULL REFERENCES homework_assignments(id) ON DELETE CASCADE,
+    class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (assignment_id, class_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_homework_assignment_classes_assignment ON homework_assignment_classes(tenant_id, assignment_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_homework_assignment_classes_class ON homework_assignment_classes(tenant_id, class_id)`,
+  `ALTER TABLE homework_assignment_questions ADD COLUMN IF NOT EXISTS bank_question_id INTEGER REFERENCES homework_question_bank(id) ON DELETE SET NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_homework_assignment_questions_bank ON homework_assignment_questions(bank_question_id)`,
+
+  // Backfill: các bài tập tạo trước khi có bảng homework_assignment_classes chỉ có class_id cũ,
+  // chưa có dòng nào trong bảng liên kết mới -> khiến cột "Lớp" hiện "Chưa gán lớp".
+  // ON CONFLICT DO NOTHING nhờ UNIQUE (assignment_id, class_id) nên chạy lại nhiều lần vẫn an toàn.
+  `INSERT INTO homework_assignment_classes (tenant_id, assignment_id, class_id)
+   SELECT tenant_id, id, class_id
+   FROM homework_assignments
+   WHERE class_id IS NOT NULL
+   ON CONFLICT DO NOTHING`,
 ];
 
 async function migrate() {

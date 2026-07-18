@@ -24,6 +24,7 @@ function camelItem(row) {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    usageCount: toInt(row.usage_count, 0),
   } : row;
 }
 
@@ -39,31 +40,36 @@ function normalizeOptions(options) {
 class HomeworkQuestionBankService {
   async list(tenantId, { search, questionType, category, page = 1, limit = 50 } = {}) {
     const offset = (toInt(page, 1) - 1) * toInt(limit, 50);
-    const conditions = ['tenant_id = $1'];
+    const conditions = ['b.tenant_id = $1'];
     const params = [tenantId];
     let idx = 2;
 
     if (search) {
-      conditions.push(`(question_text ILIKE $${idx} OR category ILIKE $${idx})`);
+      conditions.push(`(b.question_text ILIKE $${idx} OR b.category ILIKE $${idx})`);
       params.push(`%${search}%`);
       idx++;
     }
     if (questionType) {
-      conditions.push(`question_type = $${idx}`);
+      conditions.push(`b.question_type = $${idx}`);
       params.push(questionType);
       idx++;
     }
     if (category) {
-      conditions.push(`category = $${idx}`);
+      conditions.push(`b.category = $${idx}`);
       params.push(category);
       idx++;
     }
 
     const where = conditions.join(' AND ');
     const [countResult, rowsResult, categoriesResult] = await Promise.all([
-      pool.query(`SELECT COUNT(*) FROM homework_question_bank WHERE ${where}`, params),
+      pool.query(`SELECT COUNT(*) FROM homework_question_bank b WHERE ${where}`, params),
       pool.query(
-        `SELECT * FROM homework_question_bank WHERE ${where} ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+        `SELECT b.*,
+                (SELECT COUNT(*) FROM homework_assignment_questions q WHERE q.bank_question_id = b.id) AS usage_count
+         FROM homework_question_bank b
+         WHERE ${where}
+         ORDER BY b.created_at DESC
+         LIMIT $${idx} OFFSET $${idx + 1}`,
         [...params, toInt(limit, 50), offset]
       ),
       pool.query(

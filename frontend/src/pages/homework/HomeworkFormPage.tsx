@@ -20,6 +20,7 @@ type HomeworkQuestion = {
   score: number;
   correctAnswer: string;
   options: Array<{ label: string; text: string }>;
+  bankQuestionId?: number | null;
 };
 
 function createQuestion(type = 'multiple_choice_4', orderNumber = 1): HomeworkQuestion {
@@ -174,6 +175,9 @@ function BankPickerModal({ onClose, onConfirm }: { onClose: () => void; onConfir
                   <Badge variant="purple">{typeLabel(item.questionType)}</Badge>
                   {item.category && <Badge variant="blue">{item.category}</Badge>}
                   <Badge variant="gray">{item.score} điểm</Badge>
+                  {Number(item.usageCount || item.usage_count || 0) > 0 && (
+                    <Badge variant="orange">Đã dùng {item.usageCount || item.usage_count} lần</Badge>
+                  )}
                 </div>
               </label>
             ))}
@@ -193,7 +197,7 @@ function HomeworkFormBody({ initial, onDone }: { initial?: any; onDone: () => vo
     title: initial?.title || '',
     description: initial?.description || '',
     instructions: initial?.instructions || '',
-    classId: initial?.class_id || initial?.classId || '',
+    classIds: initial?.classIds || (initial?.class_id ? [initial.class_id] : []),
     dueDate: toLocalISOString(initial?.due_date || initial?.dueDate),
     allowLateSubmission: initial?.allow_late_submission ?? initial?.allowLateSubmission ?? false,
     totalScore: initial?.total_score || initial?.totalScore || 100,
@@ -279,6 +283,7 @@ function HomeworkFormBody({ initial, onDone }: { initial?: any; onDone: () => vo
       const startOrder = prev.questions.length + 1;
       const converted: HomeworkQuestion[] = items.map((item, index) => ({
         orderNumber: startOrder + index,
+        bankQuestionId: item.id,
         questionType: item.questionType,
         questionText: item.questionText,
         helpText: item.helpText || '',
@@ -341,13 +346,14 @@ function HomeworkFormBody({ initial, onDone }: { initial?: any; onDone: () => vo
       score: Number(question.score || 1),
       correctAnswer: question.correctAnswer,
       options: question.options,
+      bankQuestionId: question.bankQuestionId || null,
     }));
 
     setSaving(true);
     try {
       const payload = {
         ...form,
-        classId: form.classId ? Number(form.classId) : null,
+        classIds: (form.classIds || []).map(Number),
         totalScore: Number(form.totalScore || 100),
         timeLimitMinutes: form.hasTimeLimit ? Number(form.timeLimitMinutes || 30) : null,
         dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
@@ -397,12 +403,47 @@ function HomeworkFormBody({ initial, onDone }: { initial?: any; onDone: () => vo
               <label className="form-label">Tiêu đề bài tập</label>
               <input className="form-input" value={form.title} onChange={(e) => setForm((prev: any) => ({ ...prev, title: e.target.value }))} placeholder="VD: Homework Unit 3 - Present Perfect" />
             </div>
-            <div className="form-group">
-              <label className="form-label">Lớp áp dụng</label>
-              <select className="form-select" value={form.classId || ''} onChange={(e) => setForm((prev: any) => ({ ...prev, classId: e.target.value }))}>
-                <option value="">Chọn lớp</option>
-                {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
+            <div className="form-group" style={{ gridColumn: '1/-1' }}>
+              <label className="form-label">Lớp áp dụng (có thể chọn nhiều lớp)</label>
+              <div style={{
+                display: 'flex', flexWrap: 'wrap', gap: 8, padding: 12,
+                border: '1px solid var(--gray-200)', borderRadius: 10, maxHeight: 160, overflowY: 'auto',
+              }}>
+                {classes.length === 0 && <span style={{ color: 'var(--gray-400)', fontSize: 13 }}>Chưa có lớp nào</span>}
+                {classes.map((item) => {
+                  const checked = (form.classIds || []).includes(item.id);
+                  return (
+                    <label
+                      key={item.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                        border: '1px solid var(--gray-200)', borderRadius: 999, cursor: 'pointer',
+                        background: checked ? '#eff6ff' : '#fff', fontSize: 13, fontWeight: 600,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setForm((prev: any) => {
+                            const current: number[] = prev.classIds || [];
+                            const next = e.target.checked
+                              ? [...current, item.id]
+                              : current.filter((id: number) => id !== item.id);
+                            return { ...prev, classIds: next };
+                          });
+                        }}
+                      />
+                      {item.name}
+                    </label>
+                  );
+                })}
+              </div>
+              {(form.classIds || []).length > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 6 }}>
+                  Đã chọn {form.classIds.length} lớp — bài tập sẽ giao cho toàn bộ học viên trong các lớp này.
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label className="form-label">Hạn nộp</label>

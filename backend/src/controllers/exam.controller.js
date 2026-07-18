@@ -27,8 +27,7 @@ class ExamController {
   async resetInProgressAttempt(req, res, next) { try { res.json(await examService.resetInProgressAttempt(req.tenant.id, parseInt(req.params.mockExamStudentId))); } catch (err) { next(err); } }
   async saveAnswer(req, res, next) { try { res.json(await examService.saveAnswer(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body.answer || req.body)); } catch (err) { next(err); } }
   async submitAnswers(req, res, next) { try { res.json(await examService.submitAnswers(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body.answers)); } catch (err) { next(err); } }
-  async gradeStudent(req, res, next) { try { res.json(await examService.gradeStudent(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body, req.user?.id)); } catch (err) { next(err); } }
-
+  async gradeStudent(req, res, next) { try { res.json(await examService.gradeStudent(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body, req.user?.id, req.user)); } catch (err) { next(err); } }
 
   async uploadSubmissionRecording(req, res, next) {
     try {

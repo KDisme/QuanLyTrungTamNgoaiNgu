@@ -67,6 +67,7 @@ function camelAssignment(row) {
     ...safeRow,
     classId: row.class_id,
     className: row.class_name,
+    classIds: row.classes ? row.classes.map((c) => c.id) : (row.class_id ? [row.class_id] : []),
     creatorName: row.creator_name,
     creatorRoles,
     creatorLabel: row.creator_name
@@ -125,6 +126,7 @@ function normalizeQuestions(questions = []) {
       return {
         orderNumber: toInt(question.orderNumber ?? question.order_number, index + 1),
         questionType,
+        bankQuestionId: question.bankQuestionId || question.bank_question_id || null,
         questionText: String(question.questionText ?? question.question_text ?? '').trim(),
         helpText: String(question.helpText ?? question.help_text ?? '').trim() || null,
         isRequired: question.isRequired ?? question.is_required ?? true,
@@ -190,8 +192,9 @@ class HomeworkService {
     }
     if (isTeacherOnly(user)) {
       conditions.push(`EXISTS (
-        SELECT 1 FROM class_teachers ct
-        WHERE ct.tenant_id = a.tenant_id AND ct.class_id = a.class_id AND ct.teacher_id = $${idx}
+        SELECT 1 FROM homework_assignment_classes hac
+        JOIN class_teachers ct ON ct.tenant_id = hac.tenant_id AND ct.class_id = hac.class_id
+        WHERE hac.tenant_id = a.tenant_id AND hac.assignment_id = a.id AND ct.teacher_id = $${idx}
       )`);
       params.push(user.id);
       idx++;
@@ -218,14 +221,17 @@ class HomeworkService {
     const [countResult, rowsResult] = await Promise.all([
       pool.query(`SELECT COUNT(*) FROM homework_assignments a WHERE ${where}`, params),
       pool.query(
-        `SELECT a.*, c.name AS class_name,
+        `SELECT a.*,
+          (SELECT string_agg(cc.name, ', ' ORDER BY cc.name)
+            FROM homework_assignment_classes hac
+            JOIN classes cc ON cc.id = hac.class_id
+            WHERE hac.assignment_id = a.id AND hac.tenant_id = a.tenant_id) AS class_name,
           (SELECT COUNT(*) FROM homework_assignment_questions q WHERE q.assignment_id = a.id AND q.tenant_id = a.tenant_id) AS question_count,
           (SELECT COUNT(*) FROM homework_assignment_students s WHERE s.assignment_id = a.id AND s.tenant_id = a.tenant_id) AS student_count,
           (SELECT COUNT(*) FROM homework_assignment_students s JOIN homework_submissions sub ON sub.assignment_student_id = s.id WHERE s.assignment_id = a.id AND s.tenant_id = a.tenant_id AND sub.status IN ('submitted', 'graded')) AS submitted_count
           ${studentSelect}
-         FROM homework_assignments a
-         LEFT JOIN classes c ON c.id = a.class_id
-         ${studentJoin}
+          FROM homework_assignments a
+          ${studentJoin}
          WHERE ${where}
          ORDER BY a.created_at DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,
@@ -251,9 +257,16 @@ class HomeworkService {
   async getAssignment(tenantId, id, user = null, password = null) {
     if (isStudentOnly(user)) await ensureStudentHomeworkAssignments(tenantId, user.id);
     const assignmentResult = await pool.query(
-      `SELECT a.*, c.name AS class_name
+      `SELECT a.*,
+        (SELECT string_agg(cc.name, ', ' ORDER BY cc.name)
+         FROM homework_assignment_classes hac
+         JOIN classes cc ON cc.id = hac.class_id
+         WHERE hac.assignment_id = a.id AND hac.tenant_id = a.tenant_id) AS class_name,
+        (SELECT COALESCE(json_agg(json_build_object('id', cc.id, 'name', cc.name)), '[]')
+         FROM homework_assignment_classes hac
+         JOIN classes cc ON cc.id = hac.class_id
+         WHERE hac.assignment_id = a.id AND hac.tenant_id = a.tenant_id) AS classes
        FROM homework_assignments a
-       LEFT JOIN classes c ON c.id = a.class_id
        WHERE a.id = $1 AND a.tenant_id = $2`,
       [id, tenantId]
     );
@@ -263,8 +276,10 @@ class HomeworkService {
 
     if (isTeacherOnly(user)) {
       const allowed = await pool.query(
-        `SELECT 1 FROM class_teachers WHERE tenant_id=$1 AND class_id=$2 AND teacher_id=$3 LIMIT 1`,
-        [tenantId, assignment.class_id, user.id]
+        `SELECT 1 FROM homework_assignment_classes hac
+         JOIN class_teachers ct ON ct.tenant_id=hac.tenant_id AND ct.class_id=hac.class_id
+         WHERE hac.tenant_id=$1 AND hac.assignment_id=$2 AND ct.teacher_id=$3 LIMIT 1`,
+        [tenantId, id, user.id]
       );
       if (!allowed.rows.length) return null;
     }
@@ -432,6 +447,7 @@ class HomeworkService {
 
     return {
       ...camelAssignment(assignment),
+      classes: assignment.classes || [],
       questions,
       students,
       mySubmission,
@@ -481,9 +497,12 @@ class HomeworkService {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      if (isTeacherOnly(user) && data.classId) {
-        const allowed = await isTeacherOfClass(client, tenantId, data.classId, user.id);
-        if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
+      const classIds = Array.isArray(data.classIds) ? data.classIds.filter(Boolean).map(Number) : (data.classId ? [Number(data.classId)] : []);
+      if (isTeacherOnly(user) && classIds.length) {
+        for (const cid of classIds) {
+          const allowed = await isTeacherOfClass(client, tenantId, cid, user.id);
+          if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
+        }
       }
 
       const requirePassword = !!data.requirePassword;
@@ -500,7 +519,7 @@ class HomeworkService {
          RETURNING *`,
         [
           tenantId,
-          data.classId || null,
+          classIds[0] || null,
           data.title,
           data.description || null,
           data.instructions || null,
@@ -519,7 +538,8 @@ class HomeworkService {
       const assignment = assignmentResult.rows[0];
 
       await this._replaceQuestions(client, tenantId, assignment.id, data.questions || []);
-      const { allStudentIds } = await this._syncStudents(client, tenantId, assignment.id, data.classId || null, data.studentIds || []);
+      await this._replaceClasses(client, tenantId, assignment.id, classIds);
+      const { allStudentIds } = await this._syncStudents(client, tenantId, assignment.id, classIds, data.studentIds || []);
 
       await client.query('COMMIT');
 
@@ -571,9 +591,12 @@ class HomeworkService {
         const allowed = await isTeacherOfClass(client, tenantId, current.rows[0].class_id, user.id);
         if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể sửa bài tập của lớp mình phụ trách'), { status: 403 });
       }
-      if (isTeacherOnly(user) && data.classId) {
-        const allowed = await isTeacherOfClass(client, tenantId, data.classId, user.id);
-        if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
+      const newClassIds = Array.isArray(data.classIds) ? data.classIds.filter(Boolean).map(Number) : (data.classId !== undefined ? [Number(data.classId)].filter(Boolean) : null);
+      if (isTeacherOnly(user) && newClassIds?.length) {
+        for (const cid of newClassIds) {
+          const allowed = await isTeacherOfClass(client, tenantId, cid, user.id);
+          if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể giao bài cho lớp mình phụ trách'), { status: 403 });
+        }
       }
 
       const requirePassword = data.requirePassword !== undefined ? !!data.requirePassword : current.rows[0].require_password;
@@ -612,7 +635,7 @@ class HomeworkService {
          WHERE id=$15 AND tenant_id=$16
          RETURNING *`,
         [
-          data.classId || current.rows[0].class_id,
+          (newClassIds && newClassIds[0]) || current.rows[0].class_id,
           data.title,
           data.description || null,
           data.instructions || null,
@@ -639,8 +662,10 @@ class HomeworkService {
         await this._replaceQuestions(client, tenantId, id, data.questions);
       }
       let syncResult = null;
-      if (data.reassign || Array.isArray(data.studentIds) || data.classId !== undefined) {
-        syncResult = await this._syncStudents(client, tenantId, id, data.classId || assignmentResult.rows[0].class_id || null, data.studentIds || []);
+      if (data.reassign || Array.isArray(data.studentIds) || newClassIds !== null) {
+        const effectiveClassIds = newClassIds !== null ? newClassIds : [assignmentResult.rows[0].class_id].filter(Boolean);
+        await this._replaceClasses(client, tenantId, id, effectiveClassIds);
+        syncResult = await this._syncStudents(client, tenantId, id, effectiveClassIds, data.studentIds || []);
       }
 
       await client.query('COMMIT');
@@ -978,8 +1003,8 @@ class HomeworkService {
 
       await client.query(
         `INSERT INTO homework_assignment_questions
-         (tenant_id, assignment_id, order_number, question_type, question_text, help_text, is_required, score, correct_answer, options, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`,
+         (tenant_id, assignment_id, order_number, question_type, question_text, help_text, is_required, score, correct_answer, options, metadata, bank_question_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12)`,
         [
           tenantId,
           assignmentId,
@@ -992,18 +1017,20 @@ class HomeworkService {
           question.correctAnswer,
           JSON.stringify(question.options || []),
           JSON.stringify(question.metadata || {}),
+          question.bankQuestionId || null,
         ]
       );
     }
   }
 
-  async _syncStudents(client, tenantId, assignmentId, classId, studentIds = []) {
+  async _syncStudents(client, tenantId, assignmentId, classIds = [], studentIds = []) {
     const ids = new Set((studentIds || []).map(Number).filter(Boolean));
 
-    if (classId) {
+    const normalizedClassIds = (Array.isArray(classIds) ? classIds : [classIds]).filter(Boolean).map(Number);
+    if (normalizedClassIds.length) {
       const classStudents = await client.query(
-        `SELECT student_id FROM class_students WHERE tenant_id=$1 AND class_id=$2 AND status='active'`,
-        [tenantId, classId]
+        `SELECT DISTINCT student_id FROM class_students WHERE tenant_id=$1 AND class_id = ANY($2::int[]) AND status='active'`,
+        [tenantId, normalizedClassIds]
       );
       classStudents.rows.forEach((row) => ids.add(Number(row.student_id)));
     }
@@ -1035,6 +1062,18 @@ class HomeworkService {
       if (result.rows.length) newlyAddedStudentIds.push(studentId);
     }
     return { allStudentIds: idsArray, newlyAddedStudentIds };
+  }
+
+  async _replaceClasses(client, tenantId, assignmentId, classIds = []) {
+    const normalizedIds = [...new Set((classIds || []).filter(Boolean).map(Number))];
+    await client.query('DELETE FROM homework_assignment_classes WHERE tenant_id=$1 AND assignment_id=$2', [tenantId, assignmentId]);
+    for (const classId of normalizedIds) {
+      await client.query(
+        `INSERT INTO homework_assignment_classes (tenant_id, assignment_id, class_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [tenantId, assignmentId, classId]
+      );
+    }
+    return normalizedIds;
   }
 
   async _notifyStudentsAssigned(tenantId, assignment, studentIds) {
