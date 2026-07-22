@@ -400,11 +400,34 @@ function HomeworkFormBody({ initial, onDone }: { initial?: any; onDone: () => vo
         <div style={{ display: 'grid', gap: 14 }}>
           <div className="grid-2">
             <div className="form-group" style={{ gridColumn: '1/-1' }}>
-              <label className="form-label">Tiêu đề bài tập</label>
+              <label className="form-label">Tiêu đề bài tập <span className="required">*</span></label>
               <input className="form-input" value={form.title} onChange={(e) => setForm((prev: any) => ({ ...prev, title: e.target.value }))} placeholder="VD: Homework Unit 3 - Present Perfect" />
             </div>
             <div className="form-group" style={{ gridColumn: '1/-1' }}>
-              <label className="form-label">Lớp áp dụng (có thể chọn nhiều lớp)</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <label className="form-label" style={{ margin: 0 }}>Lớp áp dụng (có thể chọn nhiều lớp)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{
+                    fontSize: 12, fontWeight: 700, color: 'var(--primary)',
+                    background: '#eff6ff', padding: '3px 10px', borderRadius: 999,
+                  }}>
+                    Đã chọn {(form.classIds || []).length}/{classes.length} lớp
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setForm((prev: any) => {
+                        const allSelected = classes.length > 0 && (prev.classIds || []).length === classes.length;
+                        return { ...prev, classIds: allSelected ? [] : classes.map((c) => c.id) };
+                      });
+                    }}
+                  >
+                    {classes.length > 0 && (form.classIds || []).length === classes.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                  </button>
+                </div>
+              </div>
+
               <div style={{
                 display: 'flex', flexWrap: 'wrap', gap: 8, padding: 12,
                 border: '1px solid var(--gray-200)', borderRadius: 10, maxHeight: 160, overflowY: 'auto',
@@ -439,9 +462,10 @@ function HomeworkFormBody({ initial, onDone }: { initial?: any; onDone: () => vo
                   );
                 })}
               </div>
+
               {(form.classIds || []).length > 0 && (
                 <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 6 }}>
-                  Đã chọn {form.classIds.length} lớp — bài tập sẽ giao cho toàn bộ học viên trong các lớp này.
+                  Bài tập sẽ giao cho toàn bộ học viên trong {(form.classIds || []).length} lớp đã chọn.
                 </div>
               )}
             </div>
@@ -502,7 +526,7 @@ function HomeworkFormBody({ initial, onDone }: { initial?: any; onDone: () => vo
 
                 <div className="grid-2">
                   <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                    <label className="form-label">Nội dung câu hỏi</label>
+                    <label className="form-label">Nội dung câu hỏi <span className="required">*</span></label>
                     <textarea className="form-textarea" rows={3} value={question.questionText} onChange={(e) => setQuestion(index, { questionText: e.target.value })} placeholder="Nhập câu hỏi, yêu cầu làm bài hoặc đề bài" />
                   </div>
                   <div className="form-group">

@@ -253,7 +253,7 @@ function ClassForm({ initial, branches, teachers, onClose, onSuccess }: { initia
           <input className="form-input" type="number" min={1} value={form.maxStudents} onChange={e => setForm(f => ({ ...f, maxStudents: parseInt(e.target.value) }))} />
         </div>
         <div className="form-group">
-          <label className="form-label">Ngày bắt đầu</label>
+          <label className="form-label">Ngày bắt đầu {form.classType === 'fixed' && <span className="required">*</span>}</label>
           <input className="form-input" type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
         </div>
         {form.classType === 'fixed' && <>
@@ -278,7 +278,7 @@ function ClassForm({ initial, branches, teachers, onClose, onSuccess }: { initia
           </select>
         </div>
         <div className="form-group" style={{ gridColumn: '1/-1' }}>
-          <label className="form-label">Lịch học trong tuần</label>
+          <label className="form-label">Lịch học trong tuần {form.classType === 'fixed' && <span className="required">*</span>}</label>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
             {WEEKDAYS.map(d => (
               <button key={d.v} type="button" onClick={() => toggleWeekday(d.v)}
