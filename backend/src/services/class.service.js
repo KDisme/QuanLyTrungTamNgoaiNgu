@@ -13,7 +13,7 @@ class ClassService {
     return { code };
   }
 
-  async getAll(tenantId, { search, branchId, type, status, page = 1, limit = 20 }, user = null) {
+  async getAll(tenantId, { search, branchId, type, status, teacherId, page = 1, limit = 20 }, user = null) {
     const offset = (page - 1) * limit;
     const conditions = ['c.tenant_id = $1'];
     const params = [tenantId];
@@ -23,6 +23,10 @@ class ClassService {
     if (branchId) { conditions.push(`c.branch_id = $${idx}`); params.push(branchId); idx++; }
     if (type) { conditions.push(`c.class_type = $${idx}`); params.push(type); idx++; }
     if (status) { conditions.push(`c.status = $${idx}`); params.push(status); idx++; }
+    if (teacherId) {
+      conditions.push(`EXISTS (SELECT 1 FROM class_teachers ct_f WHERE ct_f.class_id=c.id AND ct_f.tenant_id=c.tenant_id AND ct_f.teacher_id=$${idx})`);
+      params.push(teacherId); idx++;
+    }
 
     const roles = user?.roles || [];
     if (roles.includes('teacher') && !roles.includes('admin') && !roles.includes('staff')) {
@@ -41,7 +45,11 @@ class ClassService {
               COUNT(DISTINCT cs.student_id) as student_count,
               COUNT(DISTINCT ct.teacher_id) as teacher_count,
               COUNT(DISTINCT s.id) as total_sessions,
-              COUNT(DISTINCT CASE WHEN s.status='completed' THEN s.id END) as completed_sessions
+              COUNT(DISTINCT CASE WHEN s.status='completed' THEN s.id END) as completed_sessions,
+              (SELECT u.full_name FROM class_teachers ct2
+               JOIN users u ON u.id = ct2.teacher_id
+               WHERE ct2.class_id = c.id
+               ORDER BY ct2.is_primary DESC, ct2.id LIMIT 1) AS primary_teacher_name
        FROM classes c
        JOIN branches b ON b.id = c.branch_id
        LEFT JOIN class_students cs ON cs.class_id = c.id AND cs.status='active'
