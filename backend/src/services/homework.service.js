@@ -80,6 +80,7 @@ function camelAssignment(row) {
     showScoreAfterSubmit: row.show_score_after_submit,
     requirePassword: row.require_password,
     timeLimitMinutes: row.time_limit_minutes,
+    shuffleQuestions: row.shuffle_questions,
     questionCount: Number(row.question_count || 0),
     studentCount: Number(row.student_count || 0),
     submittedCount: Number(row.submitted_count || 0),
@@ -376,7 +377,8 @@ class HomeworkService {
       }
 
       // --- Xáo trộn thứ tự câu hỏi + nội dung đáp án, cố định riêng cho từng học viên ---
-      if (mySubmission) {
+      // Chỉ thực hiện khi giáo viên/admin đã bật "Xáo trộn câu hỏi" cho bài tập này.
+      if (mySubmission && assignment.shuffle_questions) {
         let questionOrder = toJson(mySubmission.question_order, null);
         let optionOrders = toJson(mySubmission.option_order, null);
 
@@ -514,8 +516,8 @@ class HomeworkService {
 
       const assignmentResult = await client.query(
         `INSERT INTO homework_assignments
-         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, time_limit_minutes, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)
+         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, time_limit_minutes, shuffle_questions, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
          RETURNING *`,
         [
           tenantId,
@@ -532,6 +534,7 @@ class HomeworkService {
           requirePassword,
           passwordHash,
           timeLimitMinutes,
+          !!data.shuffleQuestions,
           user?.id || null,
         ]
       );
@@ -616,6 +619,8 @@ class HomeworkService {
         ? (data.timeLimitMinutes ? Math.max(1, parseInt(data.timeLimitMinutes, 10)) : null)
         : current.rows[0].time_limit_minutes;
 
+      const shuffleQuestions = data.shuffleQuestions !== undefined ? !!data.shuffleQuestions : current.rows[0].shuffle_questions;
+
       const assignmentResult = await client.query(
         `UPDATE homework_assignments
          SET class_id=$1,
@@ -631,8 +636,9 @@ class HomeworkService {
              require_password=$11,
              password_hash=$12,
              time_limit_minutes=$13,
-             updated_by=$14, updated_at=NOW()
-         WHERE id=$15 AND tenant_id=$16
+             shuffle_questions=$14,
+             updated_by=$15, updated_at=NOW()
+         WHERE id=$16 AND tenant_id=$17
          RETURNING *`,
         [
           (newClassIds && newClassIds[0]) || current.rows[0].class_id,
@@ -648,6 +654,7 @@ class HomeworkService {
           requirePassword,
           passwordHash,
           timeLimitMinutes,
+          shuffleQuestions,
           user?.id || null,
           id,
           tenantId,
