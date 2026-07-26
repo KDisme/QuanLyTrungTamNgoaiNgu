@@ -1,6 +1,6 @@
-# Environment files
-.env
-.env.*
-
-# Dependencies
-node_modules/
+bin/
+obj/
+.vs/
+appsettings.Local.json
+wwwroot/uploads/exams/*
+!wwwroot/uploads/exams/.gitkeep

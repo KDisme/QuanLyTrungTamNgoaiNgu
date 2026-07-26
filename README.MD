@@ -8,13 +8,13 @@ Hệ thống quản lý trung tâm ngoại ngữ đa chi nhánh (multi-tenant), 
 
 | Thành phần | Công nghệ |
 |---|---|
-| Backend | Node.js, Express |
+| Backend | ASP.NET Core Web API (.NET 8), Dapper, Npgsql |
 | Database | PostgreSQL |
 | Frontend | React + TypeScript (Vite) |
 | Styling | CSS thuần (design tokens qua CSS variables) |
-| Xác thực | JWT (`jsonwebtoken`), băm mật khẩu (`bcryptjs`) |
+| Xác thực | JWT Bearer compatible payload, băm mật khẩu BCrypt.Net-Next |
 | Biểu đồ | Recharts |
-| Upload file | Multer (lưu local `uploads/`) |
+| Upload file | ASP.NET Core `IFormFile` (lưu local `wwwroot/uploads/`) |
 
 Dự án là **multi-tenant**: mỗi trung tâm (tenant) có `slug` riêng trong URL, ví dụ `/{tenantSlug}/admin/dashboard`. Toàn bộ dữ liệu được phân vùng theo `tenant_id`.
 
@@ -132,14 +132,15 @@ admin > staff > teacher > student
 ## 6. Cài đặt & chạy dự án
 
 ### Yêu cầu
-- Node.js (khuyến nghị bản LTS gần nhất)
+-  .NET 8 SDK
+- Node.js cho frontend
 - PostgreSQL đã cài đặt và chạy sẵn
 
 ### Backend
 
 ```bash
 cd backend
-npm install
+dotnet restore
 ```
 
 Tạo file `.env` trong `backend/` với các biến môi trường cần thiết (kết nối DB, `JWT_SECRET`, `JWT_EXPIRES_IN`...).
@@ -147,14 +148,13 @@ Tạo file `.env` trong `backend/` với các biến môi trường cần thiế
 Chạy migration để khởi tạo schema:
 
 ```bash
-node src/config/migrate.js
+Dùng schema PostgreSQL hiện có. Nếu cần migration homework cũ, tham khảo `backend/Data/homework.migrate.legacy.js`.
 ```
 
 Khởi động server:
 
 ```bash
-npm start
-# hoặc dùng nodemon nếu có cấu hình dev script
+dotnet run
 ```
 
 ### Frontend
