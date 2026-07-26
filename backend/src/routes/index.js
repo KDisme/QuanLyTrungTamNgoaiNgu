@@ -170,6 +170,7 @@ tenantRouter.post('/homework-question-bank', authenticate, requireRole('admin', 
 tenantRouter.post('/homework-question-bank/bulk', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.bulkCreate);
 tenantRouter.put('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.update);
 tenantRouter.delete('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.delete);
+tenantRouter.get('/homework-question-bank/:id/usage', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.getUsage);
 
 tenantRouter.get('/notifications', authenticate, notificationCtrl.list);
 tenantRouter.get('/notifications/unread-count', authenticate, notificationCtrl.unreadCount);

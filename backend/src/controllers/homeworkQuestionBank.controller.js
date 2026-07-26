@@ -36,6 +36,15 @@ class HomeworkQuestionBankController {
     }
   }
 
+  async getUsage(req, res, next) {
+    try {
+      const usage = await bankService.getUsageDetails(req.tenant.id, parseInt(req.params.id, 10));
+      res.json({ usage });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async bulkCreate(req, res, next) {
     try {
       const items = await bankService.bulkCreate(req.tenant.id, req.user, req.body.questions || [], req.body.category || null);

@@ -3,6 +3,14 @@ import { Search, Users2 } from 'lucide-react';
 import { classesApi, usersApi } from '../../../api';
 import { Badge, EmptyState, Loading, Modal } from '../../../components/common';
 
+function formatDate(value: string | null | undefined) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return '—';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
 export default function ClassPickerModal({
   selectedIds,
   onClose,
@@ -47,11 +55,6 @@ export default function ClassPickerModal({
       return next;
     });
   };
-
-  const nameCounts = classes.reduce((acc: Record<string, number>, c: any) => {
-    acc[c.name] = (acc[c.name] || 0) + 1;
-    return acc;
-  }, {});
 
   const allVisibleSelected = classes.length > 0 && classes.every((c) => localSelected.has(c.id));
 
@@ -114,32 +117,47 @@ export default function ClassPickerModal({
         {loading ? <Loading /> : classes.length === 0 ? (
           <EmptyState message="Không tìm thấy lớp phù hợp với bộ lọc" />
         ) : (
-          <div style={{ display: 'grid', gap: 6, maxHeight: 460, overflowY: 'auto' }}>
-            {classes.map((item) => {
-              const checked = localSelected.has(item.id);
-              const isDuplicateName = nameCounts[item.name] > 1;
-              return (
-                <label
-                  key={item.id}
-                  style={{
-                    display: 'grid', gridTemplateColumns: 'auto 1fr auto auto', gap: 10, alignItems: 'center',
-                    padding: '10px 12px', border: '1px solid var(--gray-200)', borderRadius: 10, cursor: 'pointer',
-                    background: checked ? '#eff6ff' : '#fff',
-                  }}
-                >
-                  <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{item.name}</span>
-                    <Badge variant="gray">{item.code}</Badge>
-                    {isDuplicateName && <Badge variant="orange">⚠ Trùng tên</Badge>}
-                  </div>
-                  <span style={{ fontSize: 12, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>
-                    GV: {item.primary_teacher_name || 'Chưa phân công'}
-                  </span>
-                  <Badge variant="blue">{item.student_count || 0} HV</Badge>
-                </label>
-              );
-            })}
+          <div className="table-container" style={{ maxHeight: 460, overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}></th>
+                  <th>Lớp học</th>
+                  <th>Giáo viên</th>
+                  <th>Phòng học</th>
+                  <th>Ngày bắt đầu</th>
+                  <th>Ngày kết thúc</th>
+                  <th>Học viên</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classes.map((item) => {
+                  const checked = localSelected.has(item.id);
+                  return (
+                    <tr
+                      key={item.id}
+                      onClick={() => toggle(item.id)}
+                      style={{ cursor: 'pointer', background: checked ? '#eff6ff' : undefined }}
+                    >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} />
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600 }}>{item.name}</span>
+                          <Badge variant="gray">{item.code}</Badge>
+                        </div>
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{item.primary_teacher_name || 'Chưa phân công'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{item.room_names || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(item.start_date)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(item.end_date)}</td>
+                      <td><Badge variant="blue">{item.student_count || 0} HV</Badge></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

@@ -49,7 +49,11 @@ class ClassService {
               (SELECT u.full_name FROM class_teachers ct2
                JOIN users u ON u.id = ct2.teacher_id
                WHERE ct2.class_id = c.id
-               ORDER BY ct2.is_primary DESC, ct2.id LIMIT 1) AS primary_teacher_name
+               ORDER BY ct2.is_primary DESC, ct2.id LIMIT 1) AS primary_teacher_name,
+              (SELECT string_agg(DISTINCT r.name, ', ' ORDER BY r.name)
+               FROM class_weekly_schedules cws
+               JOIN rooms r ON r.id = cws.room_id
+               WHERE cws.class_id = c.id) AS room_names
        FROM classes c
        JOIN branches b ON b.id = c.branch_id
        LEFT JOIN class_students cs ON cs.class_id = c.id AND cs.status='active'

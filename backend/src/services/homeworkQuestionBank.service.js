@@ -165,6 +165,32 @@ class HomeworkQuestionBankService {
     }
     return inserted;
   }
+
+  async getUsageDetails(tenantId, bankQuestionId) {
+    const result = await pool.query(
+      `SELECT ha.id AS assignment_id, ha.title AS assignment_title, ha.status AS assignment_status,
+              ha.created_at AS assignment_created_at,
+              u.full_name AS creator_name,
+              (SELECT string_agg(c.name, ', ' ORDER BY c.name)
+               FROM homework_assignment_classes hac
+               JOIN classes c ON c.id = hac.class_id
+               WHERE hac.assignment_id = ha.id AND hac.tenant_id = ha.tenant_id) AS class_names
+       FROM homework_assignment_questions haq
+       JOIN homework_assignments ha ON ha.id = haq.assignment_id AND ha.tenant_id = haq.tenant_id
+       LEFT JOIN users u ON u.id = ha.created_by
+       WHERE haq.bank_question_id = $1 AND haq.tenant_id = $2
+       ORDER BY ha.created_at DESC`,
+      [bankQuestionId, tenantId]
+    );
+    return result.rows.map((row) => ({
+      assignmentId: row.assignment_id,
+      assignmentTitle: row.assignment_title,
+      assignmentStatus: row.assignment_status,
+      createdAt: row.assignment_created_at,
+      creatorName: row.creator_name,
+      classNames: row.class_names,
+    }));
+  }
 }
 
 module.exports = new HomeworkQuestionBankService();

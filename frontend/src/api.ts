@@ -200,6 +200,7 @@ export const homeworkQuestionBankApi = {
   update: (id: number, data: object) => api.put(`/homework-question-bank/${id}`, data),
   delete: (id: number) => api.delete(`/homework-question-bank/${id}`),
   bulkCreate: (data: object) => api.post('/homework-question-bank/bulk', data),
+  getUsage: (id: number) => api.get(`/homework-question-bank/${id}/usage`),
 };
 
 export const notificationsApi = {

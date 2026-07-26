@@ -4,6 +4,56 @@ import { homeworkQuestionBankApi } from '../../../api';
 import { Badge, EmptyState, Loading, Modal } from '../../../components/common';
 import { BANK_QUESTION_TYPES } from '../utils/homework.constants.ts';
 
+function QuestionUsagePopover({ bankQuestionId, onClose }: { bankQuestionId: number; onClose: () => void }) {
+  const [usage, setUsage] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    homeworkQuestionBankApi.getUsage(bankQuestionId)
+      .then((res) => { if (mounted) setUsage(res.data.usage || []); })
+      .catch(() => { if (mounted) setUsage([]); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [bankQuestionId]);
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+      />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 41,
+          width: 320, maxHeight: 300, overflowY: 'auto',
+          background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 12,
+          boxShadow: '0 12px 30px rgba(15, 23, 42, 0.15)', padding: 12,
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Câu hỏi này được dùng trong:</div>
+        {loading ? (
+          <div style={{ fontSize: 12, color: 'var(--gray-400)', padding: 8 }}>Đang tải...</div>
+        ) : usage.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--gray-400)', padding: 8 }}>Không tìm thấy dữ liệu sử dụng.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {usage.map((u, idx) => (
+              <div key={idx} style={{ border: '1px solid var(--gray-100)', borderRadius: 8, padding: '8px 10px', background: 'var(--gray-50)' }}>
+                <div style={{ fontWeight: 700, fontSize: 12.5 }}>{u.assignmentTitle}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--gray-500)', marginTop: 2 }}>
+                  GV: {u.creatorName || 'Không rõ'} · Lớp: {u.classNames || 'Chưa gán lớp'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function BankPickerModal({
   onClose,
   onConfirm,
@@ -18,6 +68,7 @@ export default function BankPickerModal({
   const [questionType, setQuestionType] = useState('');
   const [category, setCategory] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [usagePopoverId, setUsagePopoverId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,12 +174,25 @@ export default function BankPickerModal({
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', position: 'relative' }}>
                   <Badge variant="purple">{typeLabel(item.questionType)}</Badge>
                   {item.category && <Badge variant="blue">{item.category}</Badge>}
                   <Badge variant="gray">{item.score} điểm</Badge>
                   {Number(item.usageCount || item.usage_count || 0) > 0 && (
-                    <Badge variant="orange">Đã dùng {item.usageCount || item.usage_count} lần</Badge>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setUsagePopoverId((prev) => (prev === item.id ? null : item.id));
+                      }}
+                      style={{ border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
+                    >
+                      <Badge variant="orange">Đã dùng {item.usageCount || item.usage_count} lần ▾</Badge>
+                    </button>
+                  )}
+                  {usagePopoverId === item.id && (
+                    <QuestionUsagePopover bankQuestionId={item.id} onClose={() => setUsagePopoverId(null)} />
                   )}
                 </div>
               </label>
