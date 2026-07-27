@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { homeworkApi } from '../../../api';
-import { useAuth } from '../../../hooks/useAuth';
-import { getDisplayStatus, getStudentHomeworkTab } from '../utils/homeworkAssignments.helpers.ts';
+import { homeworkApi } from '../../../../api';
+import { useAuth } from '../../../../hooks/useAuth';
+import { getDisplayStatus, getStudentHomeworkTab } from '../../assignments/utils/homeworkAssignments.helpers.ts';
 
 export function useHomeworkAssignments() {
   const { user, tenantSlug } = useAuth();

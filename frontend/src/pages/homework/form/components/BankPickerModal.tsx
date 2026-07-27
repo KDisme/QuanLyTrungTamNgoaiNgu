@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
-import { homeworkQuestionBankApi } from '../../../api';
-import { Badge, EmptyState, Loading, Modal } from '../../../components/common';
+import { homeworkQuestionBankApi } from '../../../../api.ts';
+import { Badge, EmptyState, Loading, Modal } from '../../../../components/common/index.tsx';
 import { BANK_QUESTION_TYPES } from '../utils/homework.constants.ts';
 
 function QuestionUsagePopover({ bankQuestionId, onClose }: { bankQuestionId: number; onClose: () => void }) {

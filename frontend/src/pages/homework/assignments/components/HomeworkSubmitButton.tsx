@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal } from '../../../components/common';
+import { Modal } from '../../../../components/common';
 
 export default function HomeworkSubmitButton({
   row,

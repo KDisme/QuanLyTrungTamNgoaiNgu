@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, FileCheck2, Save, UsersRound } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { homeworkApi } from '../../../api';
-import { Badge, Modal } from '../../../components/common';
+import { homeworkApi } from '../../../../api.ts';
+import { Badge, Modal } from '../../../../components/common/index.tsx';
 import { formatDateTime, getLateDurationText } from '../utils/homeworkAssignments.helpers.ts';
 
 export default function GradeStudentModal({

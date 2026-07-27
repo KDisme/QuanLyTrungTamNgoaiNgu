@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { homeworkApi, homeworkQuestionBankApi } from '../../../api';
-import { createQuestion, toLocalISOString } from '../utils/homework.helpers';
-import { HomeworkQuestion } from '../utils/homework.types';
+import { homeworkApi, homeworkQuestionBankApi } from '../../../../api';
+import { createQuestion, toLocalISOString } from '../../form/utils/homework.helpers';
+import { HomeworkQuestion } from '../../form/utils/homework.types';
 
 export function useHomeworkForm(initial: any, onDone: () => void) {
   const [saving, setSaving] = useState(false);

@@ -1,10 +1,10 @@
 import React from 'react';
 import { ArrowLeft, Library, Plus, Users2, X } from 'lucide-react';
-import { Badge } from '../../../components/common';
+import { Badge } from '../../../../components/common/index.tsx';
 import { useHomeworkForm } from '../hooks/useHomeworkForm.ts';
 import BankPickerModal from './BankPickerModal.tsx';
 import ClassPickerModal from './ClassPickerModal.tsx';
-import QuestionEditor from './QuestionEditor.tsx';
+import QuestionEditor from '../components/QuestionEditor.tsx';
 import ConfigTab from './ConfigTab.tsx';
 import SecurityTab from './SecurityTab.tsx';
 

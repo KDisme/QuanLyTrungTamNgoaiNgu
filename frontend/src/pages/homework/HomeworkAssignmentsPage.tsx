@@ -1,10 +1,10 @@
 import React from 'react';
 import { BookOpen, Calendar, ClipboardList, Eye, EyeOff, CheckCircle2, XCircle, Lock, Timer, FileEdit, FileCheck2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { Badge, ConfirmDialog, EmptyState, Loading, StatusBadge } from '../../components/common';
-import { useHomeworkAssignments } from './hooks/useHomeworkAssignments';
-import { formatDateTime, getDisplayStatus, getLateDurationText, getStudentHomeworkStatus } from './utils/homeworkAssignments.helpers';
-import HomeworkDetailModal from './components/HomeworkDetailModal';
-import HomeworkSubmitButton from './components/HomeworkSubmitButton';
+import { useHomeworkAssignments } from './assignments/hooks/useHomeworkAssignments';
+import { formatDateTime, getDisplayStatus, getLateDurationText, getStudentHomeworkStatus } from './assignments/utils/homeworkAssignments.helpers';
+import HomeworkDetailModal from './assignments/components/HomeworkDetailModal';
+import HomeworkSubmitButton from './assignments/components/HomeworkSubmitButton';
 
 const STUDENT_TABS = [
   { id: 'todo', label: 'Cần làm' },

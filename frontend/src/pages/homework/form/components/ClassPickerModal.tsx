@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Search, Users2 } from 'lucide-react';
-import { classesApi, usersApi } from '../../../api';
-import { Badge, EmptyState, Loading, Modal } from '../../../components/common';
+import { classesApi, usersApi } from '../../../../api';
+import { Badge, EmptyState, Loading, Modal } from '../../../../components/common';
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '—';

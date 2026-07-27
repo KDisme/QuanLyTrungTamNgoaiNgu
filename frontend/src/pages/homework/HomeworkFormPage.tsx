@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { homeworkApi } from '../../api';
 import { EmptyState, Loading } from '../../components/common';
-import HomeworkFormBody from './components/HomeworkFormBody';
+import HomeworkFormBody from './form/components/HomeworkFormBody';
 
 export default function HomeworkFormPage() {
   const { id } = useParams();

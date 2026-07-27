@@ -1,8 +1,8 @@
 import React from 'react';
 import { FolderInput, Trash2 } from 'lucide-react';
-import { Badge } from '../../../components/common';
-import { QUESTION_TYPES } from '../utils/homework.constants.ts';
-import { HomeworkQuestion } from '../utils/homework.types.ts';
+import { Badge } from '../../../../components/common';
+import { QUESTION_TYPES } from '../../form/utils/homework.constants.ts';
+import { HomeworkQuestion } from '../../form/utils/homework.types.ts';
 
 export default function QuestionEditor({
   question,

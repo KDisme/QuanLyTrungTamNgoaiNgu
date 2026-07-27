@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { ClipboardList, FileCheck2, UsersRound } from 'lucide-react';
-import { EmptyState, Modal, StatusBadge } from '../../../components/common';
+import { EmptyState, Modal, StatusBadge } from '../../../../components/common/index.tsx';
 import { formatDateTime, getLateDurationText } from '../utils/homeworkAssignments.helpers.ts';
-import GradeStudentModal from './GradeStudentModal';
+import GradeStudentModal from './GradeStudentModal.tsx';
 
 export default function HomeworkDetailModal({
   detail,
