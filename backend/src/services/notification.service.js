@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const notificationPush = require('./notificationPush');
 
 function toInt(value, fallback) {
   const parsed = parseInt(value, 10);
@@ -34,7 +35,15 @@ class NotificationService {
        RETURNING *`,
       params
     );
-    return result.rows.map(camelItem);
+    const items = result.rows.map(camelItem);
+
+    // Đẩy realtime cho những user đang mở app (nếu không mở, thông báo vẫn nằm sẵn trong DB
+    // và sẽ hiện ra khi họ load lại trang — không mất dữ liệu, chỉ mất tính "ngay lập tức").
+    for (const item of items) {
+      notificationPush.pushToUser(tenantId, item.userId, item);
+    }
+
+    return items;
   }
 
   async create(tenantId, userId, payload) {

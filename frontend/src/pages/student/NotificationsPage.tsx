@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, Clock3 } from 'lucide-react';
 import { notificationsApi } from '../../api';
+import { useNotificationStream } from '../../hooks/useNotificationStream';
 import { useAuth } from '../../hooks/useAuth';
 import { Badge, EmptyState, Loading } from '../../components/common';
 
@@ -41,6 +42,13 @@ export default function NotificationsPage() {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  useNotificationStream((payload) => {
+    // Chèn thông báo mới lên đầu danh sách ngay khi có, không cần đợi F5.
+    // Tránh trùng lặp nếu vì lý do nào đó cùng 1 thông báo được đẩy 2 lần.
+    setItems((prev) => (prev.some((n) => n.id === payload.id) ? prev : [payload, ...prev]));
+    setUnreadCount((prev) => prev + 1);
+  });
 
   const openNotification = async (item: any) => {
     if (!item.isRead) {

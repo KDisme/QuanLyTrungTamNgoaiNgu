@@ -1,4 +1,5 @@
 const notificationService = require('../services/notification.service');
+const sseRegistry = require('../services/notificationPush/registry');
 
 class NotificationController {
   async list(req, res, next) {
@@ -34,6 +35,27 @@ class NotificationController {
     } catch (err) {
       next(err);
     }
+  }
+
+  async streamEvents(req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    res.write('\n');
+
+    const unregister = sseRegistry.register(req.tenant.id, req.user.id, res);
+
+    // Giữ kết nối sống qua các proxy/timeout trung gian
+    const heartbeat = setInterval(() => {
+      try { res.write(': ping\n\n'); } catch { clearInterval(heartbeat); }
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unregister();
+    });
   }
 }
 

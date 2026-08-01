@@ -39,6 +39,7 @@ const upload = multer({
   },
 });
 const activityLogCtrl = require('../controllers/activityLog.controller');
+const authenticateStream = require('../middlewares/authenticateStream');
 
 // ---- PORTAL (no tenant) ----
 router.post('/portal/find-tenant', authCtrl.portalFindTenant);
@@ -176,6 +177,7 @@ tenantRouter.get('/notifications', authenticate, notificationCtrl.list);
 tenantRouter.get('/notifications/unread-count', authenticate, notificationCtrl.unreadCount);
 tenantRouter.patch('/notifications/:id/read', authenticate, notificationCtrl.markRead);
 tenantRouter.patch('/notifications/read-all', authenticate, notificationCtrl.markAllRead);
+tenantRouter.get('/notifications/stream', authenticateStream, notificationCtrl.streamEvents.bind(notificationCtrl));
 tenantRouter.get('/homework-assignments/:id/preview', authenticate, homeworkCtrl.getPreview);
 
 // Activity logs

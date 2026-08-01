@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { notificationsApi } from '../../api';
+import { useNotificationStream } from '../../hooks/useNotificationStream';
 import { getPrimaryRole, ROLE_LABELS, ROLE_NAV, ROLE_PORTAL_NAMES } from '../../config/roleConfig';
 
 function getInitials(name: string) {
@@ -23,16 +24,30 @@ export default function Sidebar() {
   const navGroups = ROLE_NAV[role];
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // useEffect(() => {
+  //   const hasNotificationsNav = navGroups.some((group) => group.items.some((item) => item.to.endsWith('notifications')));
+  //   if (!hasNotificationsNav) return;
+  //   const fetchUnread = () => {
+  //     notificationsApi.unreadCount().then((res) => setUnreadCount(res.data.unreadCount || 0)).catch(() => {});
+  //   };
+  //   fetchUnread();
+  //   const interval = setInterval(fetchUnread, 30000);      // Polling 30 giây
+  //   return () => clearInterval(interval);
+  // }, [navGroups]);
+
+  const hasNotificationsNav = navGroups.some((group) => group.items.some((item) => item.to.endsWith('notifications')));
+
   useEffect(() => {
-    const hasNotificationsNav = navGroups.some((group) => group.items.some((item) => item.to.endsWith('notifications')));
     if (!hasNotificationsNav) return;
-    const fetchUnread = () => {
-      notificationsApi.unreadCount().then((res) => setUnreadCount(res.data.unreadCount || 0)).catch(() => {});
-    };
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
-    return () => clearInterval(interval);
-  }, [navGroups]);
+    notificationsApi.unreadCount().then((res) => setUnreadCount(res.data.unreadCount || 0)).catch(() => {});
+  }, [hasNotificationsNav]);
+
+  useNotificationStream((payload) => {
+    if (!hasNotificationsNav) return;
+    setUnreadCount((prev) => prev + 1);
+    // Tuỳ chọn: hiện toast ngay khi có thông báo mới
+    // toast.success(payload.title);
+  });
 
   const handleLogout = () => {
     logout();

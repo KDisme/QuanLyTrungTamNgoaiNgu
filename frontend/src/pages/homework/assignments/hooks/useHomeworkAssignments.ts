@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { homeworkApi } from '../../../../api';
+import { useNotificationStream } from '../../../../hooks/useNotificationStream';
 import { useAuth } from '../../../../hooks/useAuth';
 import { getDisplayStatus, getStudentHomeworkTab } from '../../assignments/utils/homeworkAssignments.helpers.ts';
 
@@ -38,6 +39,13 @@ export function useHomeworkAssignments() {
   }, [search, status]);
 
   useEffect(() => { load(); }, [load]);
+
+  useNotificationStream((payload) => {
+    // Chỉ phản ứng với sự kiện liên quan tới bài tập về nhà — bỏ qua các loại sự kiện khác (VD: thông báo cá nhân)
+    if (typeof payload?.type === 'string' && payload.type.startsWith('homework_assignment_')) {
+      load();
+    }
+  });
 
   const openGrading = async (row: any) => {
     const res = await homeworkApi.getById(row.id);
