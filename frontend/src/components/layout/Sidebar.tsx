@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { notificationsApi } from '../../api';
+import { useUnreadNotificationCount } from '../../hooks/useUnreadNotificationCount';
 import { useNotificationStream } from '../../hooks/useNotificationStream';
 import { getPrimaryRole, ROLE_LABELS, ROLE_NAV, ROLE_PORTAL_NAMES } from '../../config/roleConfig';
 
@@ -22,7 +23,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const role = getPrimaryRole(user?.roles);
   const navGroups = ROLE_NAV[role];
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useUnreadNotificationCount();
 
   // useEffect(() => {
   //   const hasNotificationsNav = navGroups.some((group) => group.items.some((item) => item.to.endsWith('notifications')));

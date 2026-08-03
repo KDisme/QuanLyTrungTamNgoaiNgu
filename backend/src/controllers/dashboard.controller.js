@@ -3,7 +3,7 @@ const dashboardService = require('../services/dashboard.service');
 class DashboardController {
   async getStats(req, res, next) {
     try {
-      const stats = await dashboardService.getStats(req.tenant.id);
+      const stats = await dashboardService.getStats(req.tenant.id, req.user);
       res.json(stats);
     } catch (err) {
       next(err);

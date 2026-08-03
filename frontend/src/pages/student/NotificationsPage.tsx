@@ -4,6 +4,7 @@ import { Bell, CheckCheck, Clock3 } from 'lucide-react';
 import { notificationsApi } from '../../api';
 import { useNotificationStream } from '../../hooks/useNotificationStream';
 import { useAuth } from '../../hooks/useAuth';
+import { useUnreadNotificationCount } from '../../hooks/useUnreadNotificationCount';
 import { Badge, EmptyState, Loading } from '../../components/common';
 
 const TYPE_LABELS: Record<string, { label: string; variant: 'blue' | 'green' | 'purple' | 'gray' }> = {
@@ -28,7 +29,7 @@ export default function NotificationsPage() {
   const { tenantSlug } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useUnreadNotificationCount();
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
