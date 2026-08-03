@@ -101,7 +101,7 @@ export default function HomeworkFormBody({ initial, onDone }: { initial?: any; o
                         fontSize: 12, fontWeight: 600, color: 'var(--primary)',
                       }}
                     >
-                      {c.name}{c.code ? ` (${c.code})` : ''}
+                      {c.name}{c.code ? ` (${c.code})` : ''}{c.primary_teacher_name ? ` — GV: ${c.primary_teacher_name}` : ''}
                       <button
                         type="button"
                         onClick={() => removeSelectedClass(c.id)}

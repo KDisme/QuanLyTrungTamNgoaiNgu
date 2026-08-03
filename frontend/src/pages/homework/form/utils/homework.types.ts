@@ -12,4 +12,5 @@ export type HomeworkQuestion = {
   score: number;
   correctAnswer: string;
   options: HomeworkQuestionOption[];
+  bankQuestionId?: number | null;
 };

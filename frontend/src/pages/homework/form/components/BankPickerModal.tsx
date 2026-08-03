@@ -129,7 +129,7 @@ export default function BankPickerModal({
         {loading ? <Loading /> : items.length === 0 ? (
           <EmptyState message="Ngân hàng chưa có câu hỏi phù hợp. Hãy soạn câu hỏi trong bài rồi bấm 'Lưu vào ngân hàng' để dùng lại sau." />
         ) : (
-          <div style={{ display: 'grid', gap: 10, maxHeight: 560, overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gap: 10 }}>
             {items.map((item) => (
               <label
                 key={item.id}

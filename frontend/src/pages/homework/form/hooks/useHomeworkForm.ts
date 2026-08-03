@@ -22,7 +22,7 @@ export function useHomeworkForm(initial: any, onDone: () => void) {
     instructions: initial?.instructions || '',
     dueDate: toLocalISOString(initial?.due_date || initial?.dueDate),
     allowLateSubmission: initial?.allow_late_submission ?? initial?.allowLateSubmission ?? false,
-    totalScore: initial?.total_score || initial?.totalScore || 100,
+    totalScore: initial?.total_score || initial?.totalScore || 10,
     status: initial?.status || 'draft',
     showAnswersAfterSubmit: initial?.show_answers_after_submit ?? initial?.showAnswersAfterSubmit ?? false,
     showScoreAfterSubmit: initial?.show_score_after_submit ?? initial?.showScoreAfterSubmit ?? true,
@@ -109,6 +109,7 @@ export function useHomeworkForm(initial: any, onDone: () => void) {
         score: item.score || 1,
         correctAnswer: item.correctAnswer || '',
         options: Array.isArray(item.options) ? item.options.map((o: any) => ({ label: o.label, text: o.text })) : [],
+        bankQuestionId: item.id,
       }));
       return { ...prev, questions: [...prev.questions, ...converted] };
     });
@@ -168,6 +169,7 @@ export function useHomeworkForm(initial: any, onDone: () => void) {
       score: Number(question.score || 1),
       correctAnswer: question.correctAnswer,
       options: question.options,
+      bankQuestionId: question.bankQuestionId || null,
     }));
 
     setSaving(true);
@@ -195,11 +197,12 @@ export function useHomeworkForm(initial: any, onDone: () => void) {
     setSelectedClasses((prev) => prev.filter((c) => c.id !== id));
   };
 
-  const confirmClassSelection = (result: { ids: number[] }) => {
+  const confirmClassSelection = (result: { ids: number[]; items?: any[] }) => {
     const idSet = new Set<number>(result.ids || []);
+    const itemMap = new Map((result.items || []).map((item: any) => [item.id, item]));
     setSelectedClasses((prev) => {
       const prevMap = new Map(prev.map((c) => [c.id, c]));
-      return Array.from(idSet).map((id) => prevMap.get(id) || { id, name: `Lớp #${id}` });
+      return Array.from(idSet).map((id) => itemMap.get(id) || prevMap.get(id) || { id, name: `Lớp #${id}` });
     });
     setShowClassPicker(false);
   };

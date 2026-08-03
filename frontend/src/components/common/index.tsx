@@ -13,13 +13,30 @@ interface ModalProps {
 export function Modal({ title, onClose, children, footer, size = 'md' }: ModalProps) {
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${size === 'lg' ? 'modal-lg' : size === 'xl' ? 'modal-xl' : ''}`}>
-        <div className="modal-header">
+      <div
+        className={`modal ${size === 'lg' ? 'modal-lg' : size === 'xl' ? 'modal-xl' : ''}`}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: '92vh',      // giới hạn chiều cao toàn modal
+          overflow: 'hidden',     // chặn tràn ra ngoài bo góc
+        }}
+      >
+        <div className="modal-header" style={{ flexShrink: 0 }}>
           <h3 className="modal-title">{title}</h3>
           <button className="modal-close" onClick={onClose}><X size={14} /></button>
         </div>
-        {children}
-        {footer && <div className="modal-footer">{footer}</div>}
+
+        {/* Vùng nội dung — chỉ chỗ này được cuộn */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '16px 24px' }}>
+          {children}
+        </div>
+
+        {footer && (
+          <div className="modal-footer" style={{ flexShrink: 0 }}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

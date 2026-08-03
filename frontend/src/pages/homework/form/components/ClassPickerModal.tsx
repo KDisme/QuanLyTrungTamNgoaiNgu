@@ -18,9 +18,12 @@ export default function ClassPickerModal({
 }: {
   selectedIds: number[];
   onClose: () => void;
-  onConfirm: (result: { ids: number[] }) => void;
+  onConfirm: (result: { ids: number[]; items: any[] }) => void;
 }) {
   const [classes, setClasses] = useState<any[]>([]);
+  // Gom lại toàn bộ lớp đã từng thấy qua các lần đổi bộ lọc/tìm kiếm, để khi xác nhận
+  // vẫn có đủ tên/mã của những lớp đã chọn dù chúng không còn nằm trong danh sách đang lọc hiện tại.
+  const [knownClasses, setKnownClasses] = useState<Map<number, any>>(new Map());
   const [teachers, setTeachers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -41,7 +44,13 @@ export default function ClassPickerModal({
         status: status || undefined,
         limit: 300,
       });
-      setClasses(res.data.classes || []);
+      const list = res.data.classes || [];
+      setClasses(list);
+      setKnownClasses((prev) => {
+        const next = new Map(prev);
+        list.forEach((item: any) => next.set(item.id, item));
+        return next;
+      });
     } finally {
       setLoading(false);
     }
@@ -69,6 +78,12 @@ export default function ClassPickerModal({
     });
   };
 
+  const getSelectedItems = () => {
+    return Array.from(localSelected)
+      .map((id) => knownClasses.get(id))
+      .filter(Boolean);
+  };
+
   return (
     <Modal
       title="Chọn lớp áp dụng"
@@ -76,10 +91,10 @@ export default function ClassPickerModal({
       onClose={onClose}
       footer={(
         <>
-          <button className="btn btn-secondary" onClick={onClose}>Huỷ</button>
+          <button className="btn btn-secondary btn-lg" onClick={onClose}>Huỷ</button>
           <button
-            className="btn btn-primary"
-            onClick={() => onConfirm({ ids: Array.from(localSelected) })}
+            className="btn btn-primary btn-lg"
+            onClick={() => onConfirm({ ids: Array.from(localSelected), items: getSelectedItems() })}
           >
             Xác nhận ({localSelected.size} lớp)
           </button>
@@ -117,7 +132,7 @@ export default function ClassPickerModal({
         {loading ? <Loading /> : classes.length === 0 ? (
           <EmptyState message="Không tìm thấy lớp phù hợp với bộ lọc" />
         ) : (
-          <div className="table-container" style={{ maxHeight: 460, overflowY: 'auto' }}>
+          <div className="table-container">
             <table>
               <thead>
                 <tr>
