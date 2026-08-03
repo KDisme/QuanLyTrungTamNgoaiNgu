@@ -59,9 +59,13 @@ class ClassController {
 
   async addStudent(req, res, next) {
     try {
-      await classService.addStudent(req.tenant.id, parseInt(req.params.id), req.body.studentId);
+      const allowOverCapacity = req.body.allowOverCapacity === true;
+      await classService.addStudent(req.tenant.id, parseInt(req.params.id), req.body.studentId, { allowOverCapacity });
       res.json({ message: 'Student added' });
-    } catch (err) { next(err); }
+    } catch (err) {
+      if (err.code === 'VALIDATION_ERROR') return res.status(422).json({ message: err.message });
+      next(err);
+    }
   }
 
   async removeStudent(req, res, next) {

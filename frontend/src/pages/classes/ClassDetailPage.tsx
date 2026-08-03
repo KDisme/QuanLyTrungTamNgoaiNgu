@@ -27,7 +27,19 @@ function formatDateOnly(value: any) {
 }
 
 
-function AddStudentModal({ classId, onClose, onSuccess }: { classId: number; onClose: () => void; onSuccess: () => void }) {
+function AddStudentModal({
+  classId,
+  currentCount,
+  maxStudents,
+  onClose,
+  onSuccess,
+}: {
+  classId: number;
+  currentCount: number;
+  maxStudents: number | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const [students, setStudents] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<number[]>([]);
@@ -37,7 +49,19 @@ function AddStudentModal({ classId, onClose, onSuccess }: { classId: number; onC
     usersApi.getAll({ role: 'student', search, limit: 50 }).then(r => setStudents(r.data.users)).catch(() => {});
   }, [search]);
 
-  const toggle = (id: number) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const remainingSlots = maxStudents != null ? Math.max(0, maxStudents - currentCount) : null;
+  const isFull = remainingSlots !== null && remainingSlots <= 0;
+
+  const toggle = (id: number) => {
+    setSelected((s) => {
+      if (s.includes(id)) return s.filter((x) => x !== id);
+      if (remainingSlots !== null && s.length >= remainingSlots) {
+        toast.error(`Lớp chỉ còn ${remainingSlots} chỗ trống, không thể chọn thêm.`);
+        return s;
+      }
+      return [...s, id];
+    });
+  };
 
   const handleAdd = async () => {
     if (!selected.length) { toast.error('Chọn ít nhất 1 học viên'); return; }
@@ -52,25 +76,43 @@ function AddStudentModal({ classId, onClose, onSuccess }: { classId: number; onC
 
   return (
     <Modal title="Thêm học viên vào lớp" onClose={onClose} size="lg"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Huỷ</button><button className="btn btn-primary" onClick={handleAdd} disabled={loading}>{loading ? '...' : `Thêm ${selected.length} học viên`}</button></>}>
-      <input className="form-input" style={{ marginBottom: 12 }} placeholder="Tìm học viên..." value={search} onChange={e => setSearch(e.target.value)} />
+      footer={<><button className="btn btn-secondary" onClick={onClose}>Huỷ</button><button className="btn btn-primary" onClick={handleAdd} disabled={loading || isFull || !selected.length}>{loading ? '...' : `Thêm ${selected.length} học viên`}</button></>}>
+
+      {maxStudents != null && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 12px', borderRadius: 8, marginBottom: 12,
+          background: isFull ? '#fef2f2' : 'var(--primary-50)',
+          color: isFull ? '#b91c1c' : 'var(--primary)', fontSize: 13, fontWeight: 600,
+        }}>
+          <span>Sĩ số hiện tại: {currentCount}/{maxStudents}</span>
+          {isFull ? <span>🚫 Lớp đã đầy</span> : <span>Còn {remainingSlots} chỗ trống</span>}
+        </div>
+      )}
+
+      <input className="form-input" style={{ marginBottom: 12 }} placeholder="Tìm học viên..." value={search} onChange={e => setSearch(e.target.value)} disabled={isFull} />
       <div style={{ maxHeight: 360, overflowY: 'auto' }}>
-        {students.map(s => (
-          <div key={s.id} onClick={() => toggle(s.id)} style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-            borderRadius: 8, cursor: 'pointer', marginBottom: 4,
-            background: selected.includes(s.id) ? 'var(--primary-50)' : 'var(--gray-50)',
-            border: `1.5px solid ${selected.includes(s.id) ? 'var(--primary)' : 'transparent'}`,
-            transition: 'all 0.12s'
-          }}>
-            <Avatar name={s.full_name} size={32} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{s.full_name}</div>
-              <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>{s.student_code} · {s.phone}</div>
+        {students.map(s => {
+          const isSelected = selected.includes(s.id);
+          const disableItem = isFull || (!isSelected && remainingSlots !== null && selected.length >= remainingSlots);
+          return (
+            <div key={s.id} onClick={() => !disableItem && toggle(s.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+              borderRadius: 8, cursor: disableItem ? 'not-allowed' : 'pointer', marginBottom: 4,
+              background: isSelected ? 'var(--primary-50)' : 'var(--gray-50)',
+              border: `1.5px solid ${isSelected ? 'var(--primary)' : 'transparent'}`,
+              opacity: disableItem ? 0.5 : 1,
+              transition: 'all 0.12s'
+            }}>
+              <Avatar name={s.full_name} size={32} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{s.full_name}</div>
+                <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>{s.student_code} · {s.phone}</div>
+              </div>
+              {isSelected && <div style={{ width: 20, height: 20, background: 'var(--primary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12 }}>✓</div>}
             </div>
-            {selected.includes(s.id) && <div style={{ width: 20, height: 20, background: 'var(--primary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12 }}>✓</div>}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Modal>
   );
@@ -236,7 +278,13 @@ export default function ClassDetailPage() {
         <div>
           {canManageClassStudents && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAddStudent(true)}><Plus size={13} /> Thêm học viên</button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowAddStudent(true)}
+                disabled={cls.max_students != null && (cls.students?.filter((s: any) => s.status === 'active').length || 0) >= cls.max_students}
+              >
+                <Plus size={13} /> Thêm học viên
+              </button>
             </div>
           )}
           <div className="card" style={{ padding: 0 }}>
@@ -328,7 +376,15 @@ export default function ClassDetailPage() {
         </div>
       )}
 
-      {canManageClassStudents && showAddStudent && <AddStudentModal classId={parseInt(id!)} onClose={() => setShowAddStudent(false)} onSuccess={load} />}
+      {canManageClassStudents && showAddStudent && (
+        <AddStudentModal
+          classId={parseInt(id!)}
+          currentCount={cls.students?.filter((s: any) => s.status === 'active').length || 0}
+          maxStudents={cls.max_students ?? null}
+          onClose={() => setShowAddStudent(false)}
+          onSuccess={load}
+        />
+      )}
       {canManageClassStudents && removingStudent && <ConfirmDialog message={`Xoá "${removingStudent.full_name}" khỏi lớp?`} onConfirm={handleRemoveStudent} onCancel={() => setRemovingStudent(null)} />}
     </div>
   );

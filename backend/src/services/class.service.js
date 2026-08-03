@@ -286,11 +286,61 @@ class ClassService {
     }
   }
 
-  async addStudent(tenantId, classId, studentId) {
-    await pool.query(
-      'INSERT INTO class_students (tenant_id, class_id, student_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
-      [tenantId, classId, studentId]
-    );
+  async addStudent(tenantId, classId, studentId, { allowOverCapacity = false } = {}) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Khoá dòng lớp để 2 request thêm học viên cùng lúc không thể cùng lọt qua giới hạn sĩ số
+      const classResult = await client.query(
+        'SELECT id, name, max_students FROM classes WHERE id=$1 AND tenant_id=$2 FOR UPDATE',
+        [classId, tenantId]
+      );
+      if (!classResult.rows.length) {
+        const err = new Error('Không tìm thấy lớp học');
+        err.code = 'VALIDATION_ERROR';
+        throw err;
+      }
+      const cls = classResult.rows[0];
+
+      const existing = await client.query(
+        `SELECT id, status FROM class_students WHERE tenant_id=$1 AND class_id=$2 AND student_id=$3`,
+        [tenantId, classId, studentId]
+      );
+      const alreadyActive = existing.rows.length && existing.rows[0].status === 'active';
+
+      if (!alreadyActive && cls.max_students != null && !allowOverCapacity) {
+        const countResult = await client.query(
+          `SELECT COUNT(*)::int AS cnt FROM class_students WHERE tenant_id=$1 AND class_id=$2 AND status='active'`,
+          [tenantId, classId]
+        );
+        const currentCount = countResult.rows[0].cnt;
+        if (currentCount >= cls.max_students) {
+          const err = new Error(`Lớp "${cls.name}" đã đủ sĩ số tối đa (${cls.max_students} học viên).`);
+          err.code = 'VALIDATION_ERROR';
+          throw err;
+        }
+      }
+
+      if (existing.rows.length) {
+        await client.query(
+          `UPDATE class_students SET status='active', joined_at=NOW() WHERE tenant_id=$1 AND class_id=$2 AND student_id=$3`,
+          [tenantId, classId, studentId]
+        );
+      } else {
+        await client.query(
+          "INSERT INTO class_students (tenant_id, class_id, student_id, status) VALUES ($1,$2,$3,'active')",
+          [tenantId, classId, studentId]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async removeStudent(tenantId, classId, studentId) {
