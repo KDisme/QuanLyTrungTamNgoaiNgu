@@ -185,9 +185,23 @@ jobs:
           if [ "${{ needs.ci.result }}" != "success" ]; then STATUS="${{ needs.ci.result }}"; fi
           if [ "${{ needs.docker.result }}" != "success" ]; then STATUS="${{ needs.docker.result }}"; fi
 
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT="${{ github.sha }}"
+          ACTOR="${{ github.actor }}"
+          CI_RESULT="${{ needs.ci.result }}"
+          DOCKER_RESULT="${{ needs.docker.result }}"
+          DEPLOY_RESULT="${{ needs.deploy.result }}"
+          PROD_URL="${{ env.PRODUCTION_URL }}"
+          LOGS_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
           if [ "$STATUS" = "success" ]; then
             TITLE="[OK] Deploy production thanh cong"
             DETAIL="Production da duoc cap nhat va health check thanh cong."
+            MESSAGE=$(printf "%s\n\nRepo: %s\nBranch: %s\nCommit: %s\nAuthor: %s\nCI: %s\nDocker: %s\nDeploy: %s\nURL: %s\nLogs: %s\n\n%s" \
+              "$TITLE" "$REPO" "$BRANCH" "$COMMIT" "$ACTOR" \
+              "$CI_RESULT" "$DOCKER_RESULT" "$DEPLOY_RESULT" \
+              "$PROD_URL" "$LOGS_URL" "$DETAIL")
           else
             TITLE="[FAIL] CI/CD production that bai"
             gh run view "${{ github.run_id }}" --log-failed > failed.log 2>/dev/null || true
@@ -196,36 +210,10 @@ jobs:
             else
               DETAIL="Khong lay duoc log tu GitHub CLI. Hay mo link Logs ben duoi de xem chi tiet."
             fi
-          fi
-
-          if [ "$STATUS" = "success" ]; then
-            MESSAGE="$TITLE
-
-Repo: ${{ github.repository }}
-Branch: ${{ github.ref_name }}
-Commit: ${{ github.sha }}
-Author: ${{ github.actor }}
-CI: ${{ needs.ci.result }}
-Docker: ${{ needs.docker.result }}
-Deploy: ${{ needs.deploy.result }}
-URL: ${{ env.PRODUCTION_URL }}
-Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-$DETAIL"
-          else
-            MESSAGE="$TITLE
-
-Repo: ${{ github.repository }}
-Branch: ${{ github.ref_name }}
-Commit: ${{ github.sha }}
-Author: ${{ github.actor }}
-CI: ${{ needs.ci.result }}
-Docker: ${{ needs.docker.result }}
-Deploy: ${{ needs.deploy.result }}
-Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-Log loi gan nhat:
-$DETAIL"
+            MESSAGE=$(printf "%s\n\nRepo: %s\nBranch: %s\nCommit: %s\nAuthor: %s\nCI: %s\nDocker: %s\nDeploy: %s\nLogs: %s\n\nLog loi gan nhat:\n%s" \
+              "$TITLE" "$REPO" "$BRANCH" "$COMMIT" "$ACTOR" \
+              "$CI_RESULT" "$DOCKER_RESULT" "$DEPLOY_RESULT" \
+              "$LOGS_URL" "$DETAIL")
           fi
 
           {
