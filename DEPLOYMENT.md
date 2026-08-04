@@ -8,7 +8,7 @@ Thông tin server production:
 - SSH user: `root`
 - SSH port: `22`
 - Đường dẫn deploy: `/opt/quanly-trungtam`
-- URL public (trước khi có domain): `http://160.25.166.147`
+- URL public (trước khi có domain): `http://160.25.166.147:8080`
 
 ## Quy trình CI/CD
 
@@ -29,7 +29,7 @@ Thông tin server production:
 4. Tạo file `.env.production` từ GitHub Secrets.
 5. Pull image mới và chạy `docker compose up -d`.
 6. Chạy migration backend bằng `npm run migrate`.
-7. Health check tại `http://localhost/health`.
+7. Health check tại `http://localhost:8080/health` (hoặc cổng cấu hình qua `FRONTEND_PORT`).
 8. Gửi thông báo thành công hoặc thất bại qua Telegram.
 
 ## GitHub Secrets

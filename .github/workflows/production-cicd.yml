@@ -15,7 +15,8 @@ env:
   BACKEND_IMAGE: kdisme/quanly-backend
   FRONTEND_IMAGE: kdisme/quanly-frontend
   DEPLOY_PATH: /opt/quanly-trungtam
-  PRODUCTION_URL: http://160.25.166.147
+  FRONTEND_PORT: 8080
+  PRODUCTION_URL: https://160.25.166.147:8080
 
 jobs:
   docker:
@@ -99,6 +100,7 @@ jobs:
           BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
           FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
           PORT: 3001
+          FRONTEND_PORT: ${{ env.FRONTEND_PORT }}
           DB_NAME: QLTTNN
           DB_USER: postgres
           DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -112,7 +114,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
-          envs: BACKEND_IMAGE,FRONTEND_IMAGE,PORT,DB_NAME,DB_USER,DB_PASSWORD,JWT_SECRET,JWT_EXPIRES_IN,FRONTEND_URL,DEFAULT_TENANT_SLUG,DEFAULT_TENANT_NAME
+          envs: BACKEND_IMAGE,FRONTEND_IMAGE,PORT,FRONTEND_PORT,DB_NAME,DB_USER,DB_PASSWORD,JWT_SECRET,JWT_EXPIRES_IN,FRONTEND_URL,DEFAULT_TENANT_SLUG,DEFAULT_TENANT_NAME
           script: |
             set -e
             mkdir -p /opt/quanly-trungtam
@@ -127,6 +129,7 @@ jobs:
               echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
               echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
               echo "PORT=${PORT}"
+              echo "FRONTEND_PORT=${FRONTEND_PORT}"
               echo "DB_NAME=${DB_NAME}"
               echo "DB_USER=${DB_USER}"
               echo "DB_PASSWORD=${DB_PASSWORD}"
@@ -180,7 +183,7 @@ jobs:
             # Fix 3: Health check với rollback tự động nếu thất bại
             HEALTHY=false
             for i in $(seq 1 30); do
-              if curl -fsS http://localhost/health > /dev/null; then
+              if curl -fsS http://localhost:${FRONTEND_PORT}/health > /dev/null; then
                 HEALTHY=true
                 break
               fi
