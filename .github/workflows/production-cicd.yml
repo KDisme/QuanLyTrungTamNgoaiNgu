@@ -183,7 +183,7 @@ jobs:
             # Fix 3: Health check với rollback tự động nếu thất bại
             HEALTHY=false
             for i in $(seq 1 30); do
-              if curl -fsS http://localhost:${FRONTEND_PORT}/health > /dev/null; then
+              if curl -k -fsS https://localhost:${FRONTEND_PORT}/health > /dev/null; then
                 HEALTHY=true
                 break
               fi

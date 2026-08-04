@@ -262,14 +262,14 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={`/${DEFAULT_TENANT_SLUG}/login`} replace />} />
+      <Route path="/" element={<LandingPage />} />
       <Route path="/portal/login" element={<Navigate to={`/${DEFAULT_TENANT_SLUG}/login`} replace />} />
       <Route path="/portal/select" element={<Navigate to={`/${DEFAULT_TENANT_SLUG}/login`} replace />} />
       <Route path="/:tenantSlug/*" element={<TenantApp />} />
       <Route path="*" element={
         isAuthenticated && tenantSlug
           ? <Navigate to={getRoleHome(tenantSlug, user?.roles)} replace />
-          : <Navigate to={`/${DEFAULT_TENANT_SLUG}/login`} replace />
+          : <Navigate to="/" replace />
       } />
     </Routes>
   );
