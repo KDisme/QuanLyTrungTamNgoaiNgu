@@ -4,14 +4,18 @@ const migrateHomework = require('./src/config/migrate');
 
 const PORT = process.env.PORT || 3001;
 
-migrateHomework()
-  .catch((err) => {
-    console.error('❌ Failed to prepare homework schema:', err);
-    process.exit(1);
-  })
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📦 Environment: ${process.env.NODE_ENV}`);
-    });
+async function start() {
+  try {
+    await migrateHomework();
+  } catch (err) {
+    console.error('⚠️  Homework schema migration skipped:', err.message);
+    // Tiếp tục start server — base schema có thể chưa được import
+  }
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📦 Environment: ${process.env.NODE_ENV}`);
   });
+}
+
+start();
