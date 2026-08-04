@@ -45,6 +45,7 @@ jobs:
         with:
           context: ./backend
           push: true
+          no-cache: true
           tags: |
             ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
             ${{ env.BACKEND_IMAGE }}:production
