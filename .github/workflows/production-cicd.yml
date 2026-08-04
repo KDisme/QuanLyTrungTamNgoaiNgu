@@ -18,38 +18,9 @@ env:
   PRODUCTION_URL: http://160.25.166.147
 
 jobs:
-  ci:
-    name: CI - Install and build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: |
-            backend/package-lock.json
-            frontend/package-lock.json
-
-      - name: Install backend dependencies
-        working-directory: backend
-        run: npm ci
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
   docker:
     name: Build and push Docker images
     runs-on: ubuntu-latest
-    needs: ci
     permissions:
       contents: read
     steps:
@@ -150,19 +121,20 @@ jobs:
             ROLLBACK_BACKEND=$(grep '^BACKEND_IMAGE=' .env.production 2>/dev/null | cut -d= -f2 || echo "")
             ROLLBACK_FRONTEND=$(grep '^FRONTEND_IMAGE=' .env.production 2>/dev/null | cut -d= -f2 || echo "")
 
-            cat > .env.production <<EOF
-            BACKEND_IMAGE=${BACKEND_IMAGE}
-            FRONTEND_IMAGE=${FRONTEND_IMAGE}
-            PORT=${PORT}
-            DB_NAME=${DB_NAME}
-            DB_USER=${DB_USER}
-            DB_PASSWORD=${DB_PASSWORD}
-            JWT_SECRET=${JWT_SECRET}
-            JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
-            FRONTEND_URL=${FRONTEND_URL}
-            DEFAULT_TENANT_SLUG=${DEFAULT_TENANT_SLUG}
-            DEFAULT_TENANT_NAME=${DEFAULT_TENANT_NAME}
-            EOF
+            # Ghi .env.production bằng echo từng dòng — tránh lỗi indent do heredoc trong YAML
+            {
+              echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
+              echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
+              echo "PORT=${PORT}"
+              echo "DB_NAME=${DB_NAME}"
+              echo "DB_USER=${DB_USER}"
+              echo "DB_PASSWORD=${DB_PASSWORD}"
+              echo "JWT_SECRET=${JWT_SECRET}"
+              echo "JWT_EXPIRES_IN=${JWT_EXPIRES_IN}"
+              echo "FRONTEND_URL=${FRONTEND_URL}"
+              echo "DEFAULT_TENANT_SLUG=${DEFAULT_TENANT_SLUG}"
+              echo "DEFAULT_TENANT_NAME=${DEFAULT_TENANT_NAME}"
+            } > .env.production
 
             docker compose --env-file .env.production -f docker-compose.prod.yml pull
 
@@ -238,7 +210,6 @@ jobs:
       actions: read
       contents: read
     needs:
-      - ci
       - docker
       - deploy
     if: always()
@@ -248,14 +219,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           STATUS="${{ needs.deploy.result }}"
-          if [ "${{ needs.ci.result }}" != "success" ]; then STATUS="${{ needs.ci.result }}"; fi
           if [ "${{ needs.docker.result }}" != "success" ]; then STATUS="${{ needs.docker.result }}"; fi
 
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
           COMMIT="${{ github.sha }}"
           ACTOR="${{ github.actor }}"
-          CI_RESULT="${{ needs.ci.result }}"
           DOCKER_RESULT="${{ needs.docker.result }}"
           DEPLOY_RESULT="${{ needs.deploy.result }}"
           PROD_URL="${{ env.PRODUCTION_URL }}"
@@ -264,9 +233,9 @@ jobs:
           if [ "$STATUS" = "success" ]; then
             TITLE="[OK] Deploy production thanh cong"
             DETAIL="Production da duoc cap nhat va health check thanh cong."
-            MESSAGE=$(printf "%s\n\nRepo: %s\nBranch: %s\nCommit: %s\nAuthor: %s\nCI: %s\nDocker: %s\nDeploy: %s\nURL: %s\nLogs: %s\n\n%s" \
+            MESSAGE=$(printf "%s\n\nRepo: %s\nBranch: %s\nCommit: %s\nAuthor: %s\nDocker: %s\nDeploy: %s\nURL: %s\nLogs: %s\n\n%s" \
               "$TITLE" "$REPO" "$BRANCH" "$COMMIT" "$ACTOR" \
-              "$CI_RESULT" "$DOCKER_RESULT" "$DEPLOY_RESULT" \
+              "$DOCKER_RESULT" "$DEPLOY_RESULT" \
               "$PROD_URL" "$LOGS_URL" "$DETAIL")
           else
             TITLE="[FAIL] CI/CD production that bai"
@@ -276,9 +245,9 @@ jobs:
             else
               DETAIL="Khong lay duoc log tu GitHub CLI. Hay mo link Logs ben duoi de xem chi tiet."
             fi
-            MESSAGE=$(printf "%s\n\nRepo: %s\nBranch: %s\nCommit: %s\nAuthor: %s\nCI: %s\nDocker: %s\nDeploy: %s\nLogs: %s\n\nLog loi gan nhat:\n%s" \
+            MESSAGE=$(printf "%s\n\nRepo: %s\nBranch: %s\nCommit: %s\nAuthor: %s\nDocker: %s\nDeploy: %s\nLogs: %s\n\nLog loi gan nhat:\n%s" \
               "$TITLE" "$REPO" "$BRANCH" "$COMMIT" "$ACTOR" \
-              "$CI_RESULT" "$DOCKER_RESULT" "$DEPLOY_RESULT" \
+              "$DOCKER_RESULT" "$DEPLOY_RESULT" \
               "$LOGS_URL" "$DETAIL")
           fi
 
