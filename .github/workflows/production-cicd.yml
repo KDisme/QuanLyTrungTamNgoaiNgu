@@ -6,6 +6,11 @@ on:
       - production
   workflow_dispatch:
 
+# Fix 4: Không cho 2 deploy chạy song song trên cùng 1 server
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 env:
   BACKEND_IMAGE: kdisme/quanly-backend
   FRONTEND_IMAGE: kdisme/quanly-frontend
@@ -63,6 +68,7 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Fix 5: Cache Docker layer theo GitHub Actions cache — tăng tốc các lần build sau
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
@@ -71,6 +77,8 @@ jobs:
           tags: |
             ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
             ${{ env.BACKEND_IMAGE }}:production
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
@@ -80,6 +88,8 @@ jobs:
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
             ${{ env.FRONTEND_IMAGE }}:production
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
   deploy:
     name: CD - Deploy to server
@@ -136,6 +146,10 @@ jobs:
             mkdir -p /opt/quanly-trungtam
             cd /opt/quanly-trungtam
 
+            # Fix 3: Lưu image hiện tại để rollback nếu deploy mới thất bại
+            ROLLBACK_BACKEND=$(grep '^BACKEND_IMAGE=' .env.production 2>/dev/null | cut -d= -f2 || echo "")
+            ROLLBACK_FRONTEND=$(grep '^FRONTEND_IMAGE=' .env.production 2>/dev/null | cut -d= -f2 || echo "")
+
             cat > .env.production <<EOF
             BACKEND_IMAGE=${BACKEND_IMAGE}
             FRONTEND_IMAGE=${FRONTEND_IMAGE}
@@ -175,23 +189,46 @@ jobs:
               echo "✅ Schema already exists, skipping import"
             fi
 
+            # Fix 8: Backup DB trước khi chạy migration
+            echo "💾 Backing up database before migration..."
+            mkdir -p /opt/quanly-trungtam/backups
+            BACKUP_FILE="/opt/quanly-trungtam/backups/backup_$(date +%Y%m%d_%H%M%S).sql"
+            docker exec quanly-postgres pg_dump -U ${DB_USER} ${DB_NAME} > "${BACKUP_FILE}"
+            echo "✅ Database backed up to ${BACKUP_FILE}"
+            # Giữ tối đa 5 bản backup gần nhất
+            ls -t /opt/quanly-trungtam/backups/*.sql 2>/dev/null | tail -n +6 | xargs rm -f || true
+
             # Khởi động toàn bộ services
             docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 
             # Chạy homework migration
             docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend npm run migrate
 
-            # Health check
+            # Fix 3: Health check với rollback tự động nếu thất bại
+            HEALTHY=false
             for i in $(seq 1 30); do
               if curl -fsS http://localhost/health > /dev/null; then
-                exit 0
+                HEALTHY=true
+                break
               fi
               sleep 2
             done
 
-            docker compose --env-file .env.production -f docker-compose.prod.yml ps
-            docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=120 backend
-            exit 1
+            if [ "$HEALTHY" != "true" ]; then
+              echo "❌ Health check failed!"
+              if [ -n "$ROLLBACK_BACKEND" ]; then
+                echo "🔄 Rolling back to: ${ROLLBACK_BACKEND}..."
+                sed -i "s|BACKEND_IMAGE=.*|BACKEND_IMAGE=${ROLLBACK_BACKEND}|" .env.production
+                sed -i "s|FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${ROLLBACK_FRONTEND}|" .env.production
+                docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+                echo "✅ Rollback complete"
+              else
+                echo "⚠️  No previous version to rollback to"
+              fi
+              docker compose --env-file .env.production -f docker-compose.prod.yml ps
+              docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=120 backend
+              exit 1
+            fi
 
 
   notify:
