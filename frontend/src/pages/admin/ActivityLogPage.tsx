@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { History, Search, UserRound, Plus, Pencil, Trash2, CheckCircle2, Wallet, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { activityLogApi } from '../../api';
+import { useNotificationStream } from '../../hooks/useNotificationStream';
 import { Badge, EmptyState, Loading } from '../../components/common';
 
 const ACTION_TYPES = [
@@ -167,6 +168,15 @@ export default function ActivityLogPage() {
   }, [search, actorId, actionType, entityType, startDate, endDate, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  useNotificationStream((payload) => {
+    // Bất kỳ sự kiện realtime nào (tạo/sửa/xoá lớp, bài tập, tài khoản, học phí...) đều
+    // là dấu hiệu có log mới — chỉ tự tải lại khi đang đứng ở trang 1 (không phá vỡ vị trí
+    // đang xem nếu Admin đang lật sang các trang sau).
+    if (page === 1) {
+      load();
+    }
+  });
 
   const resetFilters = () => {
     setSearch('');

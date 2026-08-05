@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { homeworkApi, homeworkQuestionBankApi } from '../../../../api';
-import { createQuestion, toLocalISOString } from '../../form/utils/homework.helpers';
+import { createQuestion, toLocalISOString, isDueDateValid } from '../../form/utils/homework.helpers';
 import { HomeworkQuestion } from '../../form/utils/homework.types';
 
 export function useHomeworkForm(initial: any, onDone: () => void) {
@@ -140,6 +140,7 @@ export function useHomeworkForm(initial: any, onDone: () => void) {
       if (!form.questions.length) return toast.error('Vui lòng thêm ít nhất 1 câu hỏi');
       const emptyQuestion = form.questions.find((q: HomeworkQuestion) => !q.questionText.trim());
       if (emptyQuestion) return toast.error('Vui lòng nhập nội dung cho tất cả câu hỏi');
+      if (!isDueDateValid(form.dueDate)) return toast.error('Hạn nộp phải lớn hơn hoặc bằng thời điểm hiện tại');
       setTab('config');
       return;
     }
@@ -155,6 +156,10 @@ export function useHomeworkForm(initial: any, onDone: () => void) {
   const submit = async () => {
     if (!form.title.trim()) return toast.error('Vui lòng nhập tiêu đề bài tập');
     if (!form.questions.length) return toast.error('Vui lòng thêm ít nhất 1 câu hỏi');
+    if (!isDueDateValid(form.dueDate)) {
+      setTab('info');
+      return toast.error('Hạn nộp phải lớn hơn hoặc bằng thời điểm hiện tại');
+    }
     if (form.requirePassword && !form.password.trim() && !(initial?.require_password || initial?.requirePassword)) {
       setTab('security');
       return toast.error('Vui lòng nhập mật khẩu cho bài tập');

@@ -5,11 +5,26 @@ const { isTeacherOnly, normalizeAnswerValue } = require('./utils');
 const { normalizeQuestions } = require('./mappers');
 const { isTeacherOfClass } = require('./db-helpers');
 
+function assertDueDateValid(dueDate, previousDueDate) {
+  if (dueDate === undefined || dueDate === null || dueDate === '') return;
+  // Phương án (B): nếu hạn nộp không đổi so với giá trị đã lưu, không chặn (cho phép sửa bài cũ đã quá hạn)
+  const prev = previousDueDate ? new Date(previousDueDate).getTime() : null;
+  const next = new Date(dueDate).getTime();
+  if (Number.isNaN(next)) {
+    throw Object.assign(new Error('Hạn nộp không hợp lệ'), { status: 400 });
+  }
+  if (prev !== null && prev === next) return; // không đổi hạn nộp -> bỏ qua check
+  if (next < Date.now()) {
+    throw Object.assign(new Error('Hạn nộp phải lớn hơn hoặc bằng thời điểm hiện tại'), { status: 400 });
+  }
+}
+
 module.exports = {
   async createAssignment(tenantId, user, data) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      assertDueDateValid(data.dueDate);
       const classIds = Array.isArray(data.classIds) ? data.classIds.filter(Boolean).map(Number) : (data.classId ? [Number(data.classId)] : []);
       if (isTeacherOnly(user) && classIds.length) {
         for (const cid of classIds) {
@@ -64,9 +79,12 @@ module.exports = {
       }
 
       let className = null;
-      if (data.classId) {
-        const classInfo = await pool.query('SELECT name FROM classes WHERE id=$1 AND tenant_id=$2', [data.classId, tenantId]);
-        className = classInfo.rows[0]?.name || null;
+      if (classIds.length) {
+        const classInfo = await pool.query(
+          `SELECT string_agg(name, ', ' ORDER BY name) AS names FROM classes WHERE id = ANY($1::int[]) AND tenant_id=$2`,
+          [classIds, tenantId]
+        );
+        className = classInfo.rows[0]?.names || null;
       }
 
       activityLogService.log(tenantId, user, {
@@ -77,7 +95,7 @@ module.exports = {
         description: className
           ? `đã tạo bài tập "${assignment.title}" cho lớp "${className}"`
           : `đã tạo bài tập "${assignment.title}" (chưa gán lớp)`,
-        metadata: { classId: data.classId || null, className, status: assignment.status },
+        metadata: { classIds, className, status: assignment.status },
       }).catch((err) => console.error('Failed to log homework creation:', err));
 
       this._getAdminAndTeacherIds(tenantId, classIds)
@@ -113,6 +131,7 @@ module.exports = {
         const allowed = await isTeacherOfClass(client, tenantId, current.rows[0].class_id, user.id);
         if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể sửa bài tập của lớp mình phụ trách'), { status: 403 });
       }
+      assertDueDateValid(data.dueDate, current.rows[0].due_date);
       const newClassIds = Array.isArray(data.classIds) ? data.classIds.filter(Boolean).map(Number) : (data.classId !== undefined ? [Number(data.classId)].filter(Boolean) : null);
       if (isTeacherOnly(user) && newClassIds?.length) {
         for (const cid of newClassIds) {

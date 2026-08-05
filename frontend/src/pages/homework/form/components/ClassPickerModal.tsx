@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Search, Users2 } from 'lucide-react';
 import { classesApi, usersApi } from '../../../../api';
 import { Badge, EmptyState, Loading, Modal } from '../../../../components/common';
+import { formatTimeRangesWithSession } from '../utils/homework.helpers';
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '—';
@@ -87,7 +88,7 @@ export default function ClassPickerModal({
   return (
     <Modal
       title="Chọn lớp áp dụng"
-      size="xl"
+      size="2xl"
       onClose={onClose}
       footer={(
         <>
@@ -140,6 +141,7 @@ export default function ClassPickerModal({
                   <th>Lớp học</th>
                   <th>Giáo viên</th>
                   <th>Phòng học</th>
+                  <th>Giờ học</th>
                   <th>Ngày bắt đầu</th>
                   <th>Ngày kết thúc</th>
                   <th>Học viên</th>
@@ -157,14 +159,17 @@ export default function ClassPickerModal({
                       <td onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={checked} onChange={() => toggle(item.id)} />
                       </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
                           <span style={{ fontWeight: 600 }}>{item.name}</span>
                           <Badge variant="gray">{item.code}</Badge>
                         </div>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{item.primary_teacher_name || 'Chưa phân công'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{item.room_names || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--primary)' }}>
+                        {formatTimeRangesWithSession(item.time_ranges)}
+                      </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatDate(item.start_date)}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatDate(item.end_date)}</td>
                       <td><Badge variant="blue">{item.student_count || 0} HV</Badge></td>

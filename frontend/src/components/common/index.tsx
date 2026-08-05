@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'md' | 'lg' | 'xl';
+  size?: 'md' | 'lg' | 'xl' | '2xl';
 }
 
 export function Modal({ title, onClose, children, footer, size = 'md' }: ModalProps) {
@@ -20,6 +20,7 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: ModalPr
           flexDirection: 'column',
           maxHeight: '92vh',      // giới hạn chiều cao toàn modal
           overflow: 'hidden',     // chặn tràn ra ngoài bo góc
+          ...(size === '2xl' ? { width: '95vw', maxWidth: 1400 } : {}),
         }}
       >
         <div className="modal-header" style={{ flexShrink: 0 }}>

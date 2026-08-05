@@ -7,6 +7,7 @@ import ClassPickerModal from './ClassPickerModal.tsx';
 import QuestionEditor from '../components/QuestionEditor.tsx';
 import ConfigTab from './ConfigTab.tsx';
 import SecurityTab from './SecurityTab.tsx';
+import { getMinDueDate } from '../utils/homework.helpers.ts';
 
 const TABS = [
   { id: 'info', label: 'Thông tin' },
@@ -126,6 +127,7 @@ export default function HomeworkFormBody({ initial, onDone }: { initial?: any; o
                 type="datetime-local"
                 className="form-input"
                 value={form.dueDate}
+                min={getMinDueDate()}
                 onChange={(e) => setForm((prev: any) => ({ ...prev, dueDate: e.target.value }))}
               />
             </div>
