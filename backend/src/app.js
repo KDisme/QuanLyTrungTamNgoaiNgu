@@ -13,7 +13,21 @@ app.use('/uploads', express.static(require('path').join(__dirname, '../uploads')
 const routes = require('./routes');
 app.use('/api', routes);
 
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+const pool = require('./config/database');
+
+app.get('/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', database: 'connected', timestamp: new Date() });
+  } catch (err) {
+    res.status(503).json({
+      status: 'error',
+      database: 'disconnected',
+      error: err.message,
+      timestamp: new Date()
+    });
+  }
+});
 
 app.use((req, res) => res.status(404).json({ message: 'Route not found' }));
 

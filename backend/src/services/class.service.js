@@ -144,16 +144,32 @@ class ClassService {
     try {
       await client.query('BEGIN');
 
+      // Khóa advisory cấp transaction theo tenant để ngăn race-condition sinh mã lớp đồng thời
+      await client.query('SELECT pg_advisory_xact_lock($1, $2)', [tenantId, 1001]);
+
       this._validateClassPayload(data);
       const finalBranchId = branchId || await this._getDefaultBranchId(client, tenantId);
 
-      const codeResult = await client.query(
-        `SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 3) AS INTEGER)), 0) + 1 AS next_num
-         FROM classes
-         WHERE tenant_id=$1 AND code ~ '^LH[0-9]+$'`,
-        [tenantId]
-      );
-      const code = `LH${String(parseInt(codeResult.rows[0].next_num, 10)).padStart(3, '0')}`;
+      let code = data.code?.trim();
+      if (!code) {
+        const codeResult = await client.query(
+          `SELECT COALESCE(MAX(CAST(SUBSTRING(code FROM 3) AS INTEGER)), 0) + 1 AS next_num
+           FROM classes
+           WHERE tenant_id=$1 AND code ~ '^LH[0-9]+$'`,
+          [tenantId]
+        );
+        code = `LH${String(parseInt(codeResult.rows[0].next_num, 10)).padStart(3, '0')}`;
+      } else {
+        const dupCheck = await client.query(
+          'SELECT 1 FROM classes WHERE tenant_id=$1 AND code=$2',
+          [tenantId, code]
+        );
+        if (dupCheck.rows.length) {
+          const err = new Error(`Mã lớp "${code}" đã tồn tại trong trung tâm`);
+          err.code = 'VALIDATION_ERROR';
+          throw err;
+        }
+      }
 
       const result = await client.query(
         `INSERT INTO classes (tenant_id, branch_id, name, code, class_type, max_students, expected_fee, start_date, end_date, expected_sessions, description)

@@ -7,9 +7,10 @@ const PORT = process.env.PORT || 3001;
 async function start() {
   try {
     await migrateHomework();
+    console.log('✅ Database migration completed');
   } catch (err) {
-    console.error('⚠️  Homework schema migration skipped:', err.message);
-    // Tiếp tục start server — base schema có thể chưa được import
+    console.error('❌ Database migration failed:', err.message);
+    process.exit(1);
   }
 
   app.listen(PORT, () => {

@@ -93,16 +93,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTenantName(tenantName);
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('tenantSlug');
-    localStorage.removeItem('tenantName');
-    setUser(null);
-    setTenantSlug(null);
-    setTenantName(null);
-  };
-
   const hasRole = (role: string) => user?.roles?.includes(role) ?? false;
 
   return (

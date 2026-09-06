@@ -651,7 +651,7 @@ class ExamService {
 
   async deleteMockExam(tenantId, id) {
     const checkAttempts = await pool.query(
-      `SELECT COUNT(*)::int AS count FROM mock_exam_attempts a
+      `SELECT COUNT(*)::int AS count FROM student_exam_attempts a
        JOIN mock_exam_students s ON s.id = a.mock_exam_student_id
        WHERE s.mock_exam_id = $1 AND s.tenant_id = $2`,
       [id, tenantId]

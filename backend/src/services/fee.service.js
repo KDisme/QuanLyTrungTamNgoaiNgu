@@ -140,14 +140,25 @@ class FeeService {
     try {
       await client.query('BEGIN');
 
+      // Khóa advisory cấp transaction theo tenant để ngăn race-condition khi sinh mã đợt thu đồng thời
+      await client.query('SELECT pg_advisory_xact_lock($1, $2)', [tenantId, 1002]);
+
       let collectionCode;
       try {
         const codeRes = await client.query('SELECT generate_collection_code($1) as code', [tenantId]);
         collectionCode = codeRes.rows[0].code;
       } catch {
-        const cnt = await client.query('SELECT COUNT(*)+1 as n FROM fee_collections WHERE tenant_id=$1', [tenantId]);
         const now = new Date();
-        collectionCode = `HP-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(cnt.rows[0].n).padStart(4,'0')}`;
+        const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const prefix = `HP-${yearMonth}`;
+        const maxRes = await client.query(
+          `SELECT COALESCE(MAX(CAST(SUBSTRING(collection_code FROM 10) AS INTEGER)), 0) + 1 AS next_n
+           FROM fee_collections
+           WHERE tenant_id = $1 AND collection_code ~ $2`,
+          [tenantId, `^${prefix}[0-9]+$`]
+        );
+        const nextN = parseInt(maxRes.rows[0].next_n, 10) || 1;
+        collectionCode = `${prefix}${String(nextN).padStart(4, '0')}`;
       }
 
       let amount = parseFloat(totalAmount) || 0;
