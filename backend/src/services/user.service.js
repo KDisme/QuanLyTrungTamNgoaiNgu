@@ -4,7 +4,9 @@ const activityLogService = require('./activityLog.service');
 
 class UserService {
   async getAll(tenantId, { role, status, search, branchId, page = 1, limit = 20 }) {
-    const offset = (page - 1) * limit;
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const offset = (safePage - 1) * safeLimit;
     const conditions = ['u.tenant_id = $1'];
     const params = [tenantId];
     let idx = 2;
@@ -71,13 +73,13 @@ class UserService {
                 stf.staff_code, stf.position, stf.start_date
        ORDER BY u.full_name
        LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...params, limit, offset]
+      [...params, safeLimit, offset]
     );
 
     return {
       total: parseInt(countResult.rows[0].count),
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page: safePage,
+      limit: safeLimit,
       users: result.rows,
     };
   }
@@ -126,8 +128,18 @@ class UserService {
       await client.query('BEGIN');
 
       const { fullName, email, phone, gender, dateOfBirth, address, password, roles = [], teacherInfo, studentInfo, staffInfo } = data;
+      const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+      const normalizedPhone = phone ? String(phone).trim() : null;
 
-      // const passwordHash = password ? await authService.hashPassword(password) : null;
+      if (normalizedEmail) {
+        const emailCheck = await client.query(
+          'SELECT 1 FROM users WHERE tenant_id = $1 AND LOWER(email) = $2',
+          [tenantId, normalizedEmail]
+        );
+        if (emailCheck.rows.length) {
+          throw Object.assign(new Error('Email này đã được sử dụng trong trung tâm'), { status: 400 });
+        }
+      }
 
       // Never leave password_hash NULL — a NULL hash makes the account permanently unable to log in
       // with no way for admin to notice until the user tries and fails. Always default it server-side
@@ -138,7 +150,7 @@ class UserService {
       const userResult = await client.query(
         `INSERT INTO users (tenant_id, full_name, email, phone, gender, date_of_birth, address, password_hash)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [tenantId, fullName, email || null, phone || null, gender || null, dateOfBirth || null, address || null, passwordHash]
+        [tenantId, fullName, normalizedEmail, normalizedPhone, gender || null, dateOfBirth || null, address || null, passwordHash]
       );
       const user = userResult.rows[0];
 
@@ -211,8 +223,19 @@ class UserService {
       const current = currentResult.rows[0];
 
       const fullName = data.fullName ?? data.full_name ?? current.full_name;
-      const email = data.email !== undefined ? (data.email || null) : current.email;
-      const phone = data.phone !== undefined ? (data.phone || null) : current.phone;
+      const normalizedEmail = data.email !== undefined
+        ? (data.email ? String(data.email).trim().toLowerCase() : null)
+        : current.email;
+      if (normalizedEmail && normalizedEmail !== current.email) {
+        const emailCheck = await client.query(
+          'SELECT 1 FROM users WHERE tenant_id = $1 AND LOWER(email) = $2 AND id <> $3',
+          [tenantId, normalizedEmail, userId]
+        );
+        if (emailCheck.rows.length) {
+          throw Object.assign(new Error('Email này đã được sử dụng trong trung tâm'), { status: 400 });
+        }
+      }
+      const phone = data.phone !== undefined ? (data.phone ? String(data.phone).trim() : null) : current.phone;
       const gender = data.gender !== undefined ? (data.gender || null) : current.gender;
       const dateOfBirth = data.dateOfBirth ?? data.date_of_birth ?? current.date_of_birth;
       const address = data.address !== undefined ? (data.address || null) : current.address;
@@ -221,7 +244,7 @@ class UserService {
       await client.query(
         `UPDATE users SET full_name=$1, email=$2, phone=$3, gender=$4, date_of_birth=$5, address=$6, is_active=$7, updated_at=NOW()
          WHERE id=$8 AND tenant_id=$9`,
-        [fullName, email, phone, gender, dateOfBirth || null, address, isActive, userId, tenantId]
+        [fullName, normalizedEmail, phone, gender, dateOfBirth || null, address, isActive, userId, tenantId]
       );
 
       if (current.is_active !== isActive) {
@@ -237,7 +260,14 @@ class UserService {
       }
 
       if (Array.isArray(data.roles)) {
-        const roles = [...new Set(data.roles)].filter((role) => ['admin', 'teacher', 'student', 'staff'].includes(role));
+        // Chỉ admin mới được gán role admin; staff không được cấp quyền admin
+        const actorRoles = actor?.roles || [];
+        const isActorAdmin = actorRoles.includes('admin');
+        if (!isActorAdmin && data.roles.includes('admin')) {
+          throw Object.assign(new Error('Không có quyền cấp vai trò Admin'), { status: 403 });
+        }
+        const allowedRoles = ['admin', 'teacher', 'student', 'staff'];
+        const roles = [...new Set(data.roles)].filter((role) => allowedRoles.includes(role));
         await client.query('DELETE FROM roles WHERE tenant_id=$1 AND user_id=$2', [tenantId, userId]);
         for (const role of roles) {
           await client.query(

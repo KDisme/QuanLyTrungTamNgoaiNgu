@@ -349,6 +349,18 @@ class ExamService {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // #10: Block editing if the exam set already has active student attempts
+      const hasAttempts = await client.query(
+        `SELECT 1 FROM student_exam_attempts sea
+         JOIN mock_exam_students mes ON mes.id=sea.mock_exam_student_id
+         JOIN mock_exams m ON m.id=mes.mock_exam_id
+         WHERE m.exam_set_id=$1 AND sea.tenant_id=$2 LIMIT 1`,
+        [id, tenantId]
+      );
+      if (hasAttempts.rows.length) {
+        await client.query('ROLLBACK');
+        throw Object.assign(new Error('Bộ đề đang có học viên làm bài hoặc đã hoàn thành, không thể chỉnh sửa để đảm bảo tính toàn vẹn dữ liệu'), { status: 400 });
+      }
       const fmt = getFormat(data.formatCode || data.format_code || 'TOEIC_LR');
       const settings = { ...(fmt.settings || {}), ...(data.settings || {}) };
       const result = await client.query(
@@ -380,15 +392,46 @@ class ExamService {
       const examSet = result.rows[0];
       const orderedIds = [];
       const shortages = [];
+      // #9: Pick whole question groups to preserve audio/passage coherence
       for (const rule of fmt.blueprint) {
-        const qs = await client.query(
-          `SELECT id FROM exam_questions WHERE tenant_id=$1 AND format_code=$2 AND skill=$3 AND part=$4 AND status='active' ORDER BY COALESCE(sequence_no, id) LIMIT $5`,
-          [tenantId, fmt.code, rule.skill, rule.part, rule.count]
-        );
-        if (qs.rows.length < Number(rule.count || 0)) {
-          shortages.push(`${rule.skill} - ${rule.part}: cần ${rule.count}, hiện có ${qs.rows.length}`);
+        const questionsPerGroup = rule.questionsPerGroup || rule.qPerGroup || 0;
+        if (questionsPerGroup > 1) {
+          // Group-based selection: pick N complete groups
+          const groupCount = Math.ceil(Number(rule.count || 0) / questionsPerGroup);
+          const groups = await client.query(
+            `SELECT DISTINCT group_key FROM exam_questions
+             WHERE tenant_id=$1 AND format_code=$2 AND skill=$3 AND part=$4
+               AND status='active' AND group_key IS NOT NULL
+             ORDER BY RANDOM() LIMIT $5`,
+            [tenantId, fmt.code, rule.skill, rule.part, groupCount]
+          );
+          const groupKeys = groups.rows.map(r => r.group_key);
+          const pickedCount = groupKeys.length * questionsPerGroup;
+          if (pickedCount < Number(rule.count || 0)) {
+            shortages.push(`${rule.skill} - ${rule.part}: cần ${groupCount} nhóm (${rule.count} câu), hiện có ${groups.rows.length} nhóm`);
+          }
+          if (groupKeys.length) {
+            const qs = await client.query(
+              `SELECT id FROM exam_questions
+               WHERE tenant_id=$1 AND group_key = ANY($2::text[]) AND status='active'
+               ORDER BY sequence_no ASC NULLS LAST, id ASC`,
+              [tenantId, groupKeys]
+            );
+            orderedIds.push(...qs.rows.map(r => r.id));
+          }
+        } else {
+          // Single-question selection (Part 5, Part 2, etc.)
+          const qs = await client.query(
+            `SELECT id FROM exam_questions
+             WHERE tenant_id=$1 AND format_code=$2 AND skill=$3 AND part=$4 AND status='active'
+             ORDER BY RANDOM() LIMIT $5`,
+            [tenantId, fmt.code, rule.skill, rule.part, rule.count]
+          );
+          if (qs.rows.length < Number(rule.count || 0)) {
+            shortages.push(`${rule.skill} - ${rule.part}: cần ${rule.count}, hiện có ${qs.rows.length}`);
+          }
+          orderedIds.push(...qs.rows.map(r => r.id));
         }
-        orderedIds.push(...qs.rows.map(r => r.id));
       }
       if (shortages.length && data.allowPartial !== true) {
         throw Object.assign(new Error(`Ngân hàng câu hỏi chưa đủ để tạo bộ đề. ${shortages.join('; ')}`), { status: 400, shortages });
@@ -414,7 +457,20 @@ class ExamService {
     }
   }
 
-  async deleteExamSet(tenantId, id) { await pool.query('DELETE FROM exam_sets WHERE id=$1 AND tenant_id=$2', [id, tenantId]); }
+  async deleteExamSet(tenantId, id) {
+    // Kiểm tra bộ đề có đang được dùng trong kỳ thi không trước khi xóa
+    const inUse = await pool.query(
+      `SELECT COUNT(*) FROM mock_exams WHERE exam_set_id=$1 AND tenant_id=$2`,
+      [id, tenantId]
+    );
+    if (Number(inUse.rows[0]?.count || 0) > 0) {
+      throw Object.assign(
+        new Error('Bộ đề đang được sử dụng trong kỳ thi. Vui lòng xoá kỳ thi liên quan trước.'),
+        { status: 400 }
+      );
+    }
+    await pool.query('DELETE FROM exam_sets WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
+  }
 
   async listMockExams(tenantId, { search, status, page = 1, limit = 20 }, user = null) {
     const offset = (toInt(page, 1) - 1) * toInt(limit, 20);
@@ -528,7 +584,18 @@ class ExamService {
       for (const student of students) student.answers = [];
     }
 
-    const includeCorrect = isAdminStaff || roles.includes('teacher') || (isStudentOnly && m.rows[0].show_result === true && students[0]?.status === 'graded');
+    // #3: Strip is_correct/score from answers for students who cannot see results yet
+    const showResultFlag = m.rows[0].show_result === true;
+    for (const student of students) {
+      const attemptStatus = student.latest_attempt_status;
+      const canShowGrading = isAdminStaff || isTeacherOnly ||
+        (isStudentOnly && showResultFlag && attemptStatus === 'graded');
+      if (!canShowGrading) {
+        student.answers = (student.answers || []).map(({ is_correct, score, graded_by, graded_at, ...rest }) => rest);
+      }
+    }
+
+    const includeCorrect = isAdminStaff || roles.includes('teacher') || (isStudentOnly && showResultFlag && students[0]?.latest_attempt_status === 'graded');
     const questions = await pool.query(
       `SELECT esq.order_number, esq.section, esq.part AS set_part, q.*, g.content AS group_content, g.media AS group_media, g.display_config AS group_display_config,
         COALESCE(json_agg(json_build_object('id', o.id, 'optionLabel', o.option_label, 'optionText', o.option_text, 'isCorrect', o.is_correct) ORDER BY o.option_label) FILTER (WHERE o.id IS NOT NULL), '[]') AS options
@@ -552,10 +619,12 @@ class ExamService {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // attemptLimit = 0 means unlimited
+      const attemptLimit = Number(data.attemptLimit ?? 1);
       const result = await client.query(
         `INSERT INTO mock_exams (tenant_id,exam_set_id,class_id,title,start_time,end_time,duration_minutes,attempt_limit,show_result,status,note,created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-        [tenantId, data.examSetId, data.classId || null, data.title, data.startTime || null, data.endTime || null, data.durationMinutes || 120, data.attemptLimit || 1, data.showResult ?? true, data.status || 'upcoming', data.note || null, userId]
+        [tenantId, data.examSetId, data.classId || null, data.title, data.startTime || null, data.endTime || null, data.durationMinutes || 120, attemptLimit, data.showResult ?? true, data.status || 'upcoming', data.note || null, userId]
       );
       await this._assignStudents(client, tenantId, result.rows[0].id, data.classId, data.studentIds || []);
       await client.query('COMMIT'); return this.getMockExam(tenantId, result.rows[0].id);
@@ -566,15 +635,32 @@ class ExamService {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // attemptLimit = 0 means unlimited (no minimum of 1)
+      const attemptLimit = Number(data.attemptLimit ?? 1);
       const result = await client.query(`UPDATE mock_exams SET exam_set_id=$1,class_id=$2,title=$3,start_time=$4,end_time=$5,duration_minutes=$6,attempt_limit=$7,show_result=$8,status=$9,note=$10,updated_at=NOW() WHERE id=$11 AND tenant_id=$12 RETURNING *`,
-        [data.examSetId, data.classId || null, data.title, data.startTime || null, data.endTime || null, data.durationMinutes || 120, data.attemptLimit || 1, data.showResult ?? true, data.status || 'upcoming', data.note || null, id, tenantId]);
+        [data.examSetId, data.classId || null, data.title, data.startTime || null, data.endTime || null, data.durationMinutes || 120, attemptLimit, data.showResult ?? true, data.status || 'upcoming', data.note || null, id, tenantId]);
       if (!result.rows.length) { await client.query('ROLLBACK'); return null; }
-      if (data.reassign) { await client.query('DELETE FROM mock_exam_students WHERE mock_exam_id=$1', [id]); await this._assignStudents(client, tenantId, id, data.classId, data.studentIds || []); }
+      if (data.reassign) {
+        // #11: Safe reassign — only remove students who haven't started yet
+        await client.query(`DELETE FROM mock_exam_students WHERE mock_exam_id=$1 AND status='assigned'`, [id]);
+        await this._assignStudents(client, tenantId, id, data.classId, data.studentIds || []);
+      }
       await client.query('COMMIT'); return this.getMockExam(tenantId, id);
     } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
   }
 
   async deleteMockExam(tenantId, id) {
+    const checkAttempts = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM mock_exam_attempts a
+       JOIN mock_exam_students s ON s.id = a.mock_exam_student_id
+       WHERE s.mock_exam_id = $1 AND s.tenant_id = $2`,
+      [id, tenantId]
+    );
+    if (checkAttempts.rows[0]?.count > 0) {
+      const err = new Error('Kỳ thi đã có học viên làm bài, không thể xóa dữ liệu thi. Vui lòng chuyển trạng thái sang đã hủy/kết thúc.');
+      err.status = 400;
+      throw err;
+    }
     await pool.query('DELETE FROM mock_exams WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
   }
 
@@ -619,10 +705,11 @@ class ExamService {
       await client.query(`UPDATE mock_exam_students SET status='in_progress', started_at=COALESCE(started_at, $1), updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, [existing.rows[0].started_at || new Date(), mockExamStudentId, tenantId]);
       return { row, attempt: existing.rows[0] };
     }
-    const attemptLimit = Math.max(1, Number(row.attempt_limit || 1));
+    // attemptLimit = 0 means unlimited
+    const attemptLimit = Number(row.attempt_limit ?? 1);
     const attemptCount = await client.query('SELECT COUNT(*) FROM student_exam_attempts WHERE mock_exam_student_id=$1 AND tenant_id=$2', [mockExamStudentId, tenantId]);
     const usedAttempts = Number(attemptCount.rows[0]?.count || 0);
-    if (usedAttempts >= attemptLimit) throw Object.assign(new Error(`Bạn đã dùng hết ${attemptLimit} lần làm bài`), { status: 400 });
+    if (attemptLimit > 0 && usedAttempts >= attemptLimit) throw Object.assign(new Error(`Bạn đã dùng hết ${attemptLimit} lần làm bài`), { status: 400 });
     const attemptNo = usedAttempts + 1;
     const attempt = await client.query(
       `INSERT INTO student_exam_attempts (tenant_id, mock_exam_student_id, attempt_no, status, started_at)
@@ -639,37 +726,44 @@ class ExamService {
       await client.query('BEGIN');
       const ensured = await this._ensureInProgressAttempt(client, tenantId, mockExamStudentId);
       await client.query('COMMIT');
-      return ensured ? { attempt: ensured.attempt, started_at: ensured.attempt.started_at } : null;
+      if (!ensured) return null;
+      // #2: Calculate remaining_seconds server-side so frontend cannot be bypassed
+      const row = ensured.row;
+      const durationMs = Number(row.duration_minutes || 120) * 60 * 1000;
+      const startedAt = new Date(ensured.attempt.started_at).getTime();
+      const endTime = row.end_time ? new Date(row.end_time).getTime() : Infinity;
+      const deadline = Math.min(startedAt + durationMs, endTime);
+      const remainingSeconds = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+      return { attempt: ensured.attempt, started_at: ensured.attempt.started_at, remaining_seconds: remainingSeconds };
     } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
   }
 
 
+  /**
+   * Kiểm tra xem thời gian làm bài đã hết chưa.
+   * Tiêu chí: started_at + duration_minutes <= NOW() hoặc end_time của kỳ thi đã qua.
+   */
+  _checkAttemptDeadline(row, attempt) {
+    const now = Date.now();
+    const durationMs = Number(row.duration_minutes || 120) * 60 * 1000;
+    const startedAt = new Date(attempt.started_at).getTime();
+    const endTime = row.end_time ? new Date(row.end_time).getTime() : Infinity;
+    const deadline = Math.min(startedAt + durationMs, endTime);
+    if (now > deadline + 10000) { // 10 giây grace period cho network latency
+      throw Object.assign(new Error('Đã hết thời gian làm bài, không thể lưu đáp án'), { status: 400 });
+    }
+  }
 
   async resetInProgressAttempt(tenantId, mockExamStudentId) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const row = await client.query(
-        `SELECT id, status FROM mock_exam_students WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
-        [mockExamStudentId, tenantId]
-      );
-      if (!row.rows.length) { await client.query('ROLLBACK'); return null; }
-      if (row.rows[0].status !== 'in_progress') { await client.query('COMMIT'); return row.rows[0]; }
-      await client.query(
-        `DELETE FROM student_exam_attempts
-         WHERE tenant_id=$1 AND mock_exam_student_id=$2 AND status='in_progress'`,
-        [tenantId, mockExamStudentId]
-      );
-      const updated = await client.query(
-        `UPDATE mock_exam_students
-         SET status='assigned', started_at=NULL, updated_at=NOW()
-         WHERE id=$1 AND tenant_id=$2 AND status='in_progress'
-         RETURNING *`,
-        [mockExamStudentId, tenantId]
-      );
-      await client.query('COMMIT');
-      return updated.rows[0];
-    } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
+    // #1: Soft-pause only — do NOT delete the attempt or reset status.
+    // The student can resume from where they left off when they return.
+    // Only admin can truly cancel/invalidate an attempt via a separate admin action.
+    const result = await pool.query(
+      `UPDATE mock_exam_students SET paused_at=NOW(), updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$2 AND status='in_progress' RETURNING *`,
+      [mockExamStudentId, tenantId]
+    );
+    return result.rows[0] || null;
   }
 
   async _saveAnswerOnAttempt(client, tenantId, mockExamStudentId, attemptId, ans) {
@@ -712,6 +806,8 @@ class ExamService {
       await client.query('BEGIN');
       const ensured = await this._ensureInProgressAttempt(client, tenantId, mockExamStudentId);
       if (!ensured) { await client.query('ROLLBACK'); return null; }
+      // Kiểm tra thời gian làm bài chưa hết
+      this._checkAttemptDeadline(ensured.row, ensured.attempt);
       const saved = await this._saveAnswerOnAttempt(client, tenantId, mockExamStudentId, ensured.attempt.id, answer || {});
       await client.query('COMMIT');
       return saved;
@@ -728,6 +824,8 @@ class ExamService {
       const attemptId = ensured.attempt.id;
       const attemptNo = ensured.attempt.attempt_no;
       if (ensured.attempt.status !== 'in_progress') throw Object.assign(new Error('Lần làm bài này không còn ở trạng thái đang làm'), { status: 400 });
+      // Kiểm tra thời gian làm bài chưa hết khi nộp bài
+      this._checkAttemptDeadline(row, ensured.attempt);
 
       for (const ans of answers || []) {
         await this._saveAnswerOnAttempt(client, tenantId, mockExamStudentId, attemptId, ans);
@@ -789,8 +887,10 @@ class ExamService {
     try {
       await client.query('BEGIN');
       const examInfo = await client.query(
+        // #4: Added la.status AS latest_attempt_status (was missing, causing grading to always fail)
         `SELECT ms.*, e.format_code, e.exam_type,
-          la.id AS latest_attempt_id, la.attempt_no AS latest_attempt_no
+          la.id AS latest_attempt_id, la.attempt_no AS latest_attempt_no,
+          la.status AS latest_attempt_status
          FROM mock_exam_students ms
          JOIN mock_exams m ON m.id=ms.mock_exam_id
          JOIN exam_sets e ON e.id=m.exam_set_id
@@ -806,13 +906,38 @@ class ExamService {
       if (!examInfo.rows.length) { await client.query('ROLLBACK'); return null; }
       const row = examInfo.rows[0];
       if (!row.latest_attempt_id) throw Object.assign(new Error('Học viên chưa nộp bài nên chưa thể chấm'), { status: 400 });
+      // Chỉ cho phép chấm khi bài đã được nộp hoặc đang ở trạng thái graded (chấm lại)
+      if (!['submitted', 'graded'].includes(row.latest_attempt_status)) {
+        throw Object.assign(
+          new Error('Học viên chưa nộp bài hoặc bài đang được xử lý, không thể chấm'),
+          { status: 400 }
+        );
+      }
       const attemptId = row.latest_attempt_id;
 
+      // #15: Validate score range before saving — lấy maxScore từ DB, không tin client
       const answerScores = Array.isArray(data.answerScores) ? data.answerScores : [];
       for (const item of answerScores) {
         const questionId = Number(item.questionId || item.question_id);
         if (!questionId) continue;
-        const score = Number(item.score || 0);
+        // Xác minh questionId thuộc bộ đề của kỳ thi này và lấy maxScore từ DB
+        const qCheck = await client.query(
+          `SELECT q.score AS max_score FROM exam_questions q
+           JOIN exam_set_questions esq ON esq.question_id = q.id
+           JOIN mock_exams m ON m.exam_set_id = esq.exam_set_id
+           WHERE q.id=$1 AND q.tenant_id=$2 AND m.id=(
+             SELECT mock_exam_id FROM mock_exam_students WHERE id=$3 AND tenant_id=$2
+           ) LIMIT 1`,
+          [questionId, tenantId, mockExamStudentId]
+        );
+        if (!qCheck.rows.length) {
+          throw Object.assign(new Error(`Câu hỏi ${questionId} không thuộc bộ đề của kỳ thi này`), { status: 400 });
+        }
+        const score = Number(item.score ?? 0);
+        const maxScore = Number(qCheck.rows[0].max_score || 10);
+        if (score < 0 || score > maxScore) {
+          throw Object.assign(new Error(`Điểm không hợp lệ cho câu ${questionId}: ${score} (tối đa ${maxScore})`), { status: 400 });
+        }
         const feedback = item.feedback || item.comment || '';
         const meta = feedback ? { gradingFeedback: feedback } : {};
         await client.query(
@@ -848,24 +973,63 @@ class ExamService {
         skillScores = { ...skillScores, ...(data.skillScores || {}) };
         const bySkill = { Writing: [], Speaking: [] };
         const manualDetail = await client.query(
-          `SELECT q.skill, a.score
+          // #6: Also fetch part to distinguish Writing Task 1 vs Task 2
+          `SELECT q.skill, q.part, a.score
            FROM student_exam_answers a JOIN exam_questions q ON q.id=a.question_id
-           WHERE a.tenant_id=$1 AND a.attempt_id=$2 AND q.skill IN ('Writing','Speaking')`,
+           WHERE a.tenant_id=$1 AND a.attempt_id=$2 AND q.skill IN ('Writing','Speaking')
+           ORDER BY q.skill, q.part ASC`,
           [tenantId, attemptId]
         );
-        manualDetail.rows.forEach(r => { if (bySkill[r.skill]) bySkill[r.skill].push(Number(r.score || 0)); });
-        ['Writing','Speaking'].forEach(skill => {
-          if (typeof skillScores[skill] === 'number') skillScores[skill] = { score10: Number(skillScores[skill]) };
-          if (!skillScores[skill]?.score10 && bySkill[skill].length) {
-            const avg = bySkill[skill].reduce((a,b)=>a+b,0) / bySkill[skill].length;
-            skillScores[skill] = { score10: roundToHalf(avg) };
+        manualDetail.rows.forEach(r => { if (bySkill[r.skill]) bySkill[r.skill].push({ score: Number(r.score || 0), part: r.part }); });
+
+        // #6: VSTEP Speaking — average of all speaking scores
+        if (!skillScores['Speaking']?.score10 && bySkill['Speaking'].length) {
+          const speakingScores = bySkill['Speaking'].map(x => x.score);
+          const avg = speakingScores.reduce((a, b) => a + b, 0) / speakingScores.length;
+          skillScores['Speaking'] = { score10: roundToHalf(avg) };
+        }
+        if (typeof skillScores['Speaking'] === 'number') skillScores['Speaking'] = { score10: Number(skillScores['Speaking']) };
+
+        // #6: VSTEP Writing — weighted: Task 1 × 1/3 + Task 2 × 2/3 (from blueprint scoreWeight)
+        if (!skillScores['Writing']?.score10 && bySkill['Writing'].length) {
+          // Separate Task 1 and Task 2 by part name
+          const task1Items = bySkill['Writing'].filter(x => /task.?1/i.test(x.part || ''));
+          const task2Items = bySkill['Writing'].filter(x => /task.?2/i.test(x.part || ''));
+          let writingScore10;
+          if (task1Items.length && task2Items.length) {
+            // Proper weighted calculation
+            const task1Avg = task1Items.reduce((a, b) => a + b.score, 0) / task1Items.length;
+            const task2Avg = task2Items.reduce((a, b) => a + b.score, 0) / task2Items.length;
+            writingScore10 = task1Avg * (1 / 3) + task2Avg * (2 / 3);
+            // Expose task scores for UI display
+            skillScores['Writing'] = {
+              score10: roundToHalf(writingScore10),
+              task1Score: roundToHalf(task1Avg),
+              task2Score: roundToHalf(task2Avg),
+            };
+          } else {
+            // Fallback: simple average if tasks can't be separated
+            const allWritingScores = bySkill['Writing'].map(x => x.score);
+            const avg = allWritingScores.reduce((a, b) => a + b, 0) / allWritingScores.length;
+            writingScore10 = avg;
+            skillScores['Writing'] = { score10: roundToHalf(writingScore10) };
           }
-        });
+        }
+        if (typeof skillScores['Writing'] === 'number') skillScores['Writing'] = { score10: Number(skillScores['Writing']) };
+
         ['Listening','Reading'].forEach(skill => {
           if (typeof skillScores[skill] === 'number') skillScores[skill] = { score10: Number(skillScores[skill]) };
         });
-        const values = ['Listening','Reading','Writing','Speaking'].map(skill => Number(skillScores[skill]?.score10)).filter(n => !Number.isNaN(n));
-        overallScore = values.length ? roundToHalf(values.reduce((a,b)=>a+b,0) / values.length) : null;
+        // VSTEP overall chỉ tính khi đủ cả 4 kỹ năng. Nếu thiếu kỹ năng nào, overall = null (chưa hoàn chỉnh)
+        const REQUIRED_SKILLS = ['Listening', 'Reading', 'Writing', 'Speaking'];
+        const skillValues = REQUIRED_SKILLS.map(skill => {
+          const val = Number(skillScores[skill]?.score10);
+          return Number.isNaN(val) ? null : val;
+        });
+        const allSkillsPresent = skillValues.every(v => v !== null);
+        overallScore = allSkillsPresent
+          ? roundToHalf(skillValues.reduce((a, b) => a + b, 0) / skillValues.length)
+          : null;
         totalScore = overallScore || 0;
       } else if (data.skillScores) {
         skillScores = { ...skillScores, ...data.skillScores };

@@ -44,6 +44,12 @@ const authenticate = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // Kiểm tra tenant trong JWT phải khớp với tenant trong URL
+    // Ngăn admin tenant A đổi URL sang slug tenant B để thao tác dữ liệu
+    if (req.tenant && Number(decoded.tenantId) !== Number(req.tenant.id)) {
+      return res.status(403).json({ message: 'Tenant mismatch: token không hợp lệ cho tenant này' });
+    }
+
     const result = await pool.query(
       'SELECT id, tenant_id, full_name, email, is_active FROM users WHERE id = $1 AND tenant_id = $2',
       [decoded.userId, decoded.tenantId]
@@ -53,7 +59,15 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'User not found or inactive' });
     }
 
-    req.user = { ...result.rows[0], roles: decoded.roles || [] };
+    // Lấy roles từ DB thay vì tin decoded.roles trong JWT
+    // Đảm bảo quyền bị thu hồi có hiệu lực ngay, không cần đợi token hết hạn
+    const rolesResult = await pool.query(
+      'SELECT role_type FROM roles WHERE user_id = $1 AND tenant_id = $2',
+      [decoded.userId, decoded.tenantId]
+    );
+    const roles = rolesResult.rows.map((r) => r.role_type);
+
+    req.user = { ...result.rows[0], roles };
     next();
   } catch (err) {
     return res.status(401).json({ message: 'Invalid or expired token' });

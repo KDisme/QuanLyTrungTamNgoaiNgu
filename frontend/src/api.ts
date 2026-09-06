@@ -44,6 +44,10 @@ export const authApi = {
   login: (tenantSlug: string, identifier: string, password: string) =>
     api.post(`/${tenantSlug}/auth/login`, { identifier, password }),
   me: () => api.get('/auth/me'),
+  register: (name: string, slug: string, email: string, password: string, fullName?: string) =>
+    api.post('/portal/register', { name, slug, email, password, fullName }),
+  previewSlug: (name: string) =>
+    api.get('/portal/preview-slug', { params: { name } }),
 };
 
 export const usersApi = {
@@ -173,6 +177,7 @@ export const mockExamsApi = {
   start: (mockExamStudentId: number) => api.post(`/mock-exam-students/${mockExamStudentId}/start`),
   resetInProgress: (mockExamStudentId: number) => api.post(`/mock-exam-students/${mockExamStudentId}/reset-in-progress`),
   saveAnswer: (mockExamStudentId: number, answer: object) => api.post(`/mock-exam-students/${mockExamStudentId}/save-answer`, { answer }),
+  saveAnswers: (mockExamStudentId: number, answers: object[]) => api.post(`/mock-exam-students/${mockExamStudentId}/save-answers`, { answers }),
   uploadRecording: (mockExamStudentId: number, file: Blob | File) => {
     const form = new FormData();
     const name = file instanceof File ? file.name : `speaking-${Date.now()}.webm`;

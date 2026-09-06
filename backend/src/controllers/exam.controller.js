@@ -26,6 +26,19 @@ class ExamController {
   async startAttempt(req, res, next) { try { res.json(await examService.startAttempt(req.tenant.id, parseInt(req.params.mockExamStudentId))); } catch (err) { next(err); } }
   async resetInProgressAttempt(req, res, next) { try { res.json(await examService.resetInProgressAttempt(req.tenant.id, parseInt(req.params.mockExamStudentId))); } catch (err) { next(err); } }
   async saveAnswer(req, res, next) { try { res.json(await examService.saveAnswer(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body.answer || req.body)); } catch (err) { next(err); } }
+  async saveAnswersBatch(req, res, next) {
+    try {
+      const tenantId = req.tenant.id;
+      const mockExamStudentId = parseInt(req.params.mockExamStudentId);
+      const answers = Array.isArray(req.body.answers) ? req.body.answers : [req.body.answer || req.body];
+      const results = [];
+      for (const answer of answers) {
+        const saved = await examService.saveAnswer(tenantId, mockExamStudentId, answer);
+        if (saved) results.push(saved);
+      }
+      res.json({ saved: results.length, results });
+    } catch (err) { next(err); }
+  }
   async submitAnswers(req, res, next) { try { res.json(await examService.submitAnswers(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body.answers)); } catch (err) { next(err); } }
   async gradeStudent(req, res, next) { try { res.json(await examService.gradeStudent(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body, req.user?.id, req.user)); } catch (err) { next(err); } }
 

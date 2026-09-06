@@ -8,14 +8,14 @@ import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '.
 const FORMAT_META: Record<string, { label: string; examType: string; duration: number; oneWay?: boolean; desc: string }> = {
   TOEIC_LR: { label: 'TOEIC hai kỹ năng', examType: 'TOEIC', duration: 120, desc: 'Listening 45 phút / 100 câu, Reading 75 phút / 100 câu' },
   TOEIC_4_SKILLS: { label: 'TOEIC bốn kỹ năng', examType: 'TOEIC', duration: 200, desc: 'Listening/Reading 120 phút, Speaking khoảng 20 phút, Writing 60 phút; tổng 200 phút / 219 câu-task' },
-  VSTEP_4_SKILLS: { label: 'VSTEP bốn kỹ năng', examType: 'VSTEP', duration: 172, oneWay: true, desc: 'Listening 40 phút, Reading 60 phút, Writing 60 phút, Speaking 12 phút; chấm 4 kỹ năng thang 10' },
+  VSTEP_4_SKILLS: { label: 'VSTEP bốn kỹ năng', examType: 'VSTEP', duration: 179, oneWay: true, desc: 'Listening 47 phút, Reading 60 phút, Writing 60 phút, Speaking 12 phút; tổng 179 phút, chấm 4 kỹ năng thang 10' },
 };
 
 function ExamSetForm({ initial, onClose, onSuccess }: { initial?: any; onClose: () => void; onSuccess: () => void }) {
   const [questions, setQuestions] = useState<any[]>([]);
   const initialFormat = initial?.format_code || 'TOEIC_LR';
   const [form, setForm] = useState<any>({ title: initial?.title || '', formatCode: initialFormat, examType: FORMAT_META[initialFormat]?.examType || 'TOEIC', description: initial?.description || '', durationMinutes: initial?.duration_minutes || FORMAT_META[initialFormat]?.duration || 120, totalScore: initial?.total_score || 100, status: initial?.status || 'draft', settings: initial?.settings || { oneWayNavigation: !!FORMAT_META[initialFormat]?.oneWay }, questionIds: initial?.questions?.map((q: any) => q.id) || [] });
-  useEffect(() => { examQuestionsApi.getAll({ formatCode: form.formatCode, status: 'active', limit: 300 }).then(res => setQuestions(res.data.questions || [])); }, [form.formatCode]);
+  useEffect(() => { examQuestionsApi.getAll({ formatCode: form.formatCode, status: 'active', limit: 1000 }).then(res => setQuestions(res.data.questions || [])); }, [form.formatCode]);
   const submit = async () => {
     if (!form.title.trim()) return toast.error('Vui lòng nhập tên bộ đề');
     try { if (initial) await examSetsApi.update(initial.id, form); else await examSetsApi.create(form); toast.success('Đã lưu bộ đề'); onSuccess(); onClose(); }

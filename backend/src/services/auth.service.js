@@ -11,7 +11,7 @@ class AuthService {
       `SELECT t.id, t.name, t.slug FROM tenants t
        JOIN users u ON u.tenant_id = t.id
        JOIN roles r ON r.user_id = u.id AND r.tenant_id = t.id
-       WHERE u.email = $1 AND r.role_type = 'admin' AND t.is_active = TRUE`,
+       WHERE LOWER(u.email) = LOWER(TRIM($1)) AND r.role_type = 'admin' AND t.is_active = TRUE`,
       [email]
     );
     return result.rows;
@@ -21,13 +21,14 @@ class AuthService {
    * Login with email/phone + password within a tenant
    */
   async login(tenantId, identifier, password) {
+    const cleanId = String(identifier).trim();
     const result = await pool.query(
       `SELECT u.*, array_agg(r.role_type) as roles
        FROM users u
        LEFT JOIN roles r ON r.user_id = u.id AND r.tenant_id = u.tenant_id
-       WHERE u.tenant_id = $1 AND (u.email = $2 OR u.phone = $2) AND u.is_active = TRUE
+       WHERE u.tenant_id = $1 AND (LOWER(u.email) = LOWER($2) OR u.phone = $2) AND u.is_active = TRUE
        GROUP BY u.id`,
-      [tenantId, identifier]
+      [tenantId, cleanId]
     );
 
     if (!result.rows.length) throw new Error('Invalid credentials');

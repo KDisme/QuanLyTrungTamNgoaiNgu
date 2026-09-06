@@ -8,7 +8,7 @@ import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge, Tabs } f
 const FORMAT_OPTIONS = [
   { code: 'TOEIC_LR', label: 'TOEIC hai kỹ năng', duration: 120 },
   { code: 'TOEIC_4_SKILLS', label: 'TOEIC bốn kỹ năng', duration: 200 },
-  { code: 'VSTEP_4_SKILLS', label: 'VSTEP bốn kỹ năng', duration: 172 },
+  { code: 'VSTEP_4_SKILLS', label: 'VSTEP b\u1ed1n k\u1ef9 n\u0103ng', duration: 179 },
 ];
 
 const BLUEPRINTS: Record<string, any[]> = {

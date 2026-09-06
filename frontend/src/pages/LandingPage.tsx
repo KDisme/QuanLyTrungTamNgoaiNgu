@@ -29,7 +29,7 @@ export default function LandingPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary" onClick={() => navigate('/portal/login')}>Đăng nhập</button>
-          <button className="btn btn-primary" onClick={() => navigate('/portal/login')}>Dùng thử miễn phí</button>
+          <button className="btn btn-primary" onClick={() => navigate('/register')}>Dùng thử miễn phí</button>
         </div>
       </nav>
 
@@ -72,8 +72,11 @@ export default function LandingPage() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-          <button className="btn btn-primary btn-lg" onClick={() => navigate('/portal/login')}>
-            Xem giải pháp của Sobu.io <ArrowRight size={16} />
+          <button className="btn btn-primary btn-lg" onClick={() => navigate('/register')}>
+            Dùng thử miễn phí <ArrowRight size={16} />
+          </button>
+          <button className="btn btn-secondary btn-lg" onClick={() => navigate('/portal/login')}>
+            Đăng nhập
           </button>
         </div>
       </div>
@@ -99,9 +102,14 @@ export default function LandingPage() {
       <div style={{ textAlign: 'center', padding: '60px 48px', background: 'var(--gray-900)', color: 'white' }}>
         <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 12 }}>Bắt đầu ngay hôm nay</h2>
         <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: 28, fontSize: 15 }}>Miễn phí 14 ngày, không cần thẻ tín dụng</p>
-        <button className="btn btn-primary btn-lg" onClick={() => navigate('/portal/login')}>
-          Đăng nhập / Dùng thử <ArrowRight size={16} />
-        </button>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <button className="btn btn-primary btn-lg" onClick={() => navigate('/register')}>
+            Đăng ký miễn phí <ArrowRight size={16} />
+          </button>
+          <button className="btn btn-secondary btn-lg" style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.3)' }} onClick={() => navigate('/portal/login')}>
+            Đăng nhập
+          </button>
+        </div>
       </div>
     </div>
   );

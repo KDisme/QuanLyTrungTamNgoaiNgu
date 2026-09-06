@@ -1,4 +1,5 @@
 const authService = require('../services/auth.service');
+const registrationService = require('../services/registration.service');
 
 class AuthController {
   // POST /api/portal/find-tenant
@@ -36,6 +37,30 @@ class AuthController {
   // GET /api/:tenantSlug/auth/me
   async me(req, res) {
     res.json({ user: req.user });
+  }
+
+  // POST /api/portal/register
+  async registerTenant(req, res, next) {
+    try {
+      const { name, slug, email, password, fullName } = req.body;
+      if (!name || !email || !password) {
+        return res.status(400).json({ message: 'Tên trung tâm, email và mật khẩu là bắt buộc' });
+      }
+      const result = await registrationService.register({ name, slug, email, password, fullName });
+      res.status(201).json(result);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ message: err.message });
+      next(err);
+    }
+  }
+
+  // GET /api/portal/preview-slug?name=...
+  async previewSlug(req, res, next) {
+    try {
+      const { name } = req.query;
+      const slug = await registrationService.previewSlug(name || '');
+      res.json({ slug });
+    } catch (err) { next(err); }
   }
 }
 

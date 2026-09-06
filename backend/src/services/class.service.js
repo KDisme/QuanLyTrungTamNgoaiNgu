@@ -273,23 +273,62 @@ class ClassService {
 
   async delete(tenantId, classId, user) {
     const info = await pool.query('SELECT name, code FROM classes WHERE id=$1 AND tenant_id=$2', [classId, tenantId]);
-    await pool.query('DELETE FROM classes WHERE id=$1 AND tenant_id=$2', [classId, tenantId]);
+    if (!info.rows.length) return;
 
-    if (info.rows.length) {
+    // Kiểm tra lớp đã có học viên hoặc lịch học/điểm danh chưa
+    const dataCheck = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM class_students WHERE class_id=$1 AND tenant_id=$2) AS student_count,
+        (SELECT COUNT(*) FROM schedules WHERE class_id=$1 AND tenant_id=$2) AS schedule_count`,
+      [classId, tenantId]
+    );
+    const { student_count, schedule_count } = dataCheck.rows[0];
+
+    if (Number(student_count) > 0 || Number(schedule_count) > 0) {
+      // Lớp đã có dữ liệu: chuyển sang lưu trữ (inactive) thay vì xóa cứng làm mất lịch sử điểm danh/học viên
+      await pool.query(
+        `UPDATE classes SET status='inactive', updated_at=NOW() WHERE id=$1 AND tenant_id=$2`,
+        [classId, tenantId]
+      );
       activityLogService.log(tenantId, user, {
-        actionType: 'delete',
+        actionType: 'update',
         entityType: 'class',
         entityId: classId,
         entityName: info.rows[0].name,
-        description: `đã xoá lớp học "${info.rows[0].name}" (${info.rows[0].code})`,
-      }).catch((err) => console.error('Failed to log class deletion:', err));
+        description: `đã lưu trữ (chuyển sang ngưng hoạt động) lớp học "${info.rows[0].name}" (${info.rows[0].code}) do đã có dữ liệu`,
+      }).catch((err) => console.error('Failed to log class archiving:', err));
+      return;
     }
+
+    // Lớp chưa có dữ liệu: cho phép xóa cứng
+    await pool.query('DELETE FROM classes WHERE id=$1 AND tenant_id=$2', [classId, tenantId]);
+
+    activityLogService.log(tenantId, user, {
+      actionType: 'delete',
+      entityType: 'class',
+      entityId: classId,
+      entityName: info.rows[0].name,
+      description: `đã xoá lớp học "${info.rows[0].name}" (${info.rows[0].code})`,
+    }).catch((err) => console.error('Failed to log class deletion:', err));
   }
 
   async addStudent(tenantId, classId, studentId, { allowOverCapacity = false } = {}) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Xác minh student tồn tại trong tenant này và có role 'student'
+      const studentCheck = await client.query(
+        `SELECT u.id FROM users u
+         JOIN roles r ON r.user_id = u.id AND r.tenant_id = u.tenant_id
+         WHERE u.id=$1 AND u.tenant_id=$2 AND r.role_type='student' AND u.is_active=TRUE LIMIT 1`,
+        [studentId, tenantId]
+      );
+      if (!studentCheck.rows.length) {
+        const err = new Error('Không tìm thấy học viên hợp lệ trong trung tâm này');
+        err.code = 'VALIDATION_ERROR';
+        throw err;
+      }
 
       // Khoá dòng lớp để 2 request thêm học viên cùng lúc không thể cùng lọt qua giới hạn sĩ số
       const classResult = await client.query(
@@ -345,8 +384,9 @@ class ClassService {
 
   async removeStudent(tenantId, classId, studentId) {
     await pool.query(
-      `UPDATE class_students SET status='dropped' WHERE class_id=$1 AND student_id=$2`,
-      [classId, studentId]
+      // Thêm tenant_id để tránh xóa nhầm dữ liệu của tenant khác
+      `UPDATE class_students SET status='dropped' WHERE class_id=$1 AND student_id=$2 AND tenant_id=$3`,
+      [classId, studentId, tenantId]
     );
   }
 

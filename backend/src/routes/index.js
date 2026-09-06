@@ -34,8 +34,11 @@ const upload = multer({
   }),
   limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (/^(image|audio)\//.test(file.mimetype) || file.mimetype === 'application/pdf') return cb(null, true);
-    cb(Object.assign(new Error('Chỉ cho phép upload hình ảnh, audio hoặc PDF'), { status: 400 }));
+    const ALLOWED_MIME = /^(image\/(jpeg|png|gif|webp)|audio\/(mpeg|wav|ogg|mp4|webm|aac)|application\/pdf)$/;
+    const ALLOWED_EXT = /\.(jpg|jpeg|png|gif|webp|mp3|wav|ogg|m4a|webm|aac|pdf)$/i;
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (ALLOWED_MIME.test(file.mimetype) && ALLOWED_EXT.test(ext)) return cb(null, true);
+    cb(Object.assign(new Error('Chỉ cho phép upload hình ảnh (jpg/png/gif/webp), audio (mp3/wav/ogg/m4a/webm/aac) hoặc PDF'), { status: 400 }));
   },
 });
 const activityLogCtrl = require('../controllers/activityLog.controller');
@@ -43,6 +46,8 @@ const authenticateStream = require('../middlewares/authenticateStream');
 
 // ---- PORTAL (no tenant) ----
 router.post('/portal/find-tenant', authCtrl.portalFindTenant);
+router.post('/portal/register', authCtrl.registerTenant);
+router.get('/portal/preview-slug', authCtrl.previewSlug);
 
 // ---- TENANT-SCOPED ROUTES ----
 const tenantRouter = express.Router({ mergeParams: true });
@@ -64,13 +69,12 @@ tenantRouter.delete('/users/:id', authenticate, requireRole('admin'), userCtrl.d
 // Branches
 tenantRouter.get('/branches', authenticate, requireRole('admin', 'staff', 'teacher'), branchCtrl.getAll);
 tenantRouter.get('/branches/:id', authenticate, requireRole('admin', 'staff', 'teacher'), branchCtrl.getById);
-// Single-center mode: branch/room management is hidden temporarily.
-// tenantRouter.post('/branches', authenticate, requireRole('admin'), branchCtrl.create);
-// tenantRouter.put('/branches/:id', authenticate, requireRole('admin'), branchCtrl.update);
-// tenantRouter.delete('/branches/:id', authenticate, requireRole('admin'), branchCtrl.delete);
-// tenantRouter.post('/branches/:id/rooms', authenticate, requireRole('admin'), branchCtrl.addRoom);
-// tenantRouter.put('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.updateRoom);
-// tenantRouter.delete('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.deleteRoom);
+tenantRouter.post('/branches', authenticate, requireRole('admin'), branchCtrl.create);
+tenantRouter.put('/branches/:id', authenticate, requireRole('admin'), branchCtrl.update);
+tenantRouter.delete('/branches/:id', authenticate, requireRole('admin'), branchCtrl.delete);
+tenantRouter.post('/branches/:id/rooms', authenticate, requireRole('admin'), branchCtrl.addRoom);
+tenantRouter.put('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.updateRoom);
+tenantRouter.delete('/branches/:id/rooms/:roomId', authenticate, requireRole('admin'), branchCtrl.deleteRoom);
 
 // Classes
 tenantRouter.get('/classes', authenticate, classCtrl.getAll);
@@ -150,9 +154,10 @@ tenantRouter.delete('/mock-exams/:id', authenticate, requireRole('admin'), examC
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/start', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.startAttempt);
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/reset-in-progress', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.resetInProgressAttempt);
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/save-answer', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.saveAnswer);
+tenantRouter.post('/mock-exam-students/:mockExamStudentId/save-answers', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.saveAnswersBatch);
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/recording', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), upload.single('file'), examCtrl.uploadSubmissionRecording);
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/submit', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.submitAnswers);
-tenantRouter.patch('/mock-exam-students/:mockExamStudentId/grade', authenticate, requireRole('admin', 'staff', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.gradeStudent);
+tenantRouter.patch('/mock-exam-students/:mockExamStudentId/grade', authenticate, requireRole('admin', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.gradeStudent); // #16: staff removed — only admin/teacher may grade
 
 // Dashboard
 tenantRouter.get('/dashboard', authenticate, dashboardCtrl.getStats);

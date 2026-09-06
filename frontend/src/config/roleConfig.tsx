@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, GraduationCap, UserCheck,
   BookOpen, Calendar, ClipboardList, FileText,
   Settings, Briefcase, HelpCircle, ClipboardCheck, UserCircle,
-  Bell, History
+  Bell, History, Building2, CreditCard, Receipt, FileSpreadsheet
 } from 'lucide-react';
 
 export type RoleType = 'admin' | 'staff' | 'teacher' | 'student';
@@ -61,6 +61,7 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
     {
       section: 'ĐÀO TẠO',
       items: [
+        { to: 'admin/branches', label: 'Cơ sở & Phòng học', icon: Building2 },
         { to: 'admin/classes', label: 'Lớp học', icon: BookOpen },
         { to: 'admin/schedules', label: 'Lịch học', icon: Calendar },
         { to: 'admin/attendance', label: 'Điểm danh', icon: ClipboardList },
@@ -76,9 +77,18 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
       ],
     },
     {
+      section: 'TÀI CHÍNH',
+      items: [
+        { to: 'admin/tuition', label: 'Quản lý học phí', icon: CreditCard },
+        { to: 'admin/expenses', label: 'Quản lý chi phí', icon: Receipt },
+        { to: 'admin/fee-templates', label: 'Mẫu học phí', icon: FileSpreadsheet },
+      ],
+    },
+    {
       section: 'HỆ THỐNG',
       items: [
         { to: 'admin/activity-logs', label: 'Lịch sử hoạt động', icon: History },
+        { to: 'admin/settings', label: 'Cài đặt hệ thống', icon: Settings },
       ],
     },
   ],
@@ -99,6 +109,13 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'staff/exam-questions', label: 'Ngân hàng câu hỏi', icon: HelpCircle },
         { to: 'staff/exam-sets', label: 'Bộ đề thi', icon: FileText },
         { to: 'staff/mock-exams', label: 'Kỳ thi thử', icon: ClipboardCheck },
+      ],
+    },
+    {
+      section: 'TÀI CHÍNH',
+      items: [
+        { to: 'staff/tuition', label: 'Thu học phí', icon: CreditCard },
+        { to: 'staff/fee-templates', label: 'Mẫu học phí', icon: FileSpreadsheet },
       ],
     },
   ],
@@ -130,6 +147,7 @@ export const ROLE_NAV: Record<RoleType, NavGroup[]> = {
         { to: 'student/my-classes', label: 'Lớp học của tôi', icon: BookOpen },
         { to: 'student/my-schedule', label: 'Lịch học', icon: Calendar },
         { to: 'student/my-attendance', label: 'Điểm danh của tôi', icon: ClipboardList },
+        { to: 'student/my-fees', label: 'Học phí của tôi', icon: CreditCard },
       ],
     },
     {

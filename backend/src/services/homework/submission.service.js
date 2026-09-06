@@ -34,6 +34,14 @@ module.exports = {
       }
       const assignmentStudent = assignmentStudentResult.rows[0];
 
+      // Chặn nộp lại bài đã được chấm (không phải draft)
+      if (!payload?.isDraft && assignmentStudent.status === 'graded') {
+        throw Object.assign(new Error('Bài đã được chấm, không thể nộp lại'), { status: 400 });
+      }
+      if (!payload?.isDraft && assignmentStudent.status === 'submitted') {
+        throw Object.assign(new Error('Bài đã nộp, đang đợi chấm. Không thể nộp lại'), { status: 400 });
+      }
+
       if (assignment.require_password && !assignmentStudent.started_at) {
         const provided = payload?.password;
         if (!provided || !(await bcrypt.compare(String(provided), assignment.password_hash || ''))) {
@@ -123,7 +131,7 @@ module.exports = {
            graded_at=COALESCE(EXCLUDED.graded_at, homework_submissions.graded_at),
            updated_at=NOW()
          RETURNING *`,
-        [tenantId, assignmentStudent.id, JSON.stringify(storedAnswers), status, totalScore, payload?.feedback || null, studentId, gradedAt, isDraft]
+        [tenantId, assignmentStudent.id, JSON.stringify(storedAnswers), status, totalScore, null /* feedback chỉ giáo viên/admin mới cập nhật */, studentId, gradedAt, isDraft]
       );
 
       const studentStatus = isDraft ? 'in_progress' : status;
@@ -136,7 +144,7 @@ module.exports = {
              updated_at=NOW()
          WHERE id=$4 AND tenant_id=$5
          RETURNING *`,
-        [studentStatus, totalScore, payload?.feedback || null, assignmentStudent.id, tenantId, isDraft]
+        [studentStatus, totalScore, null /* feedback chỉ giáo viên/admin */, assignmentStudent.id, tenantId, isDraft]
       );
 
       await client.query('COMMIT');
@@ -167,22 +175,57 @@ module.exports = {
         return null;
       }
       const submission = submissionResult.rows[0];
+
+      // Xác minh giáo viên có phụ trách lớp của assignment này
+      const actorRoles = actor?.roles || [];
+      const isActorAdmin = actorRoles.includes('admin') || actorRoles.includes('staff');
+      if (!isActorAdmin) {
+        const assignmentClass = await client.query(
+          `SELECT hac.class_id FROM homework_assignment_classes hac
+           WHERE hac.assignment_id=$1 AND hac.tenant_id=$2`,
+          [submission.assignment_id, tenantId]
+        );
+        const classIds = assignmentClass.rows.map((r) => r.class_id);
+        if (classIds.length > 0) {
+          const isTeacherOfClass = await client.query(
+            `SELECT 1 FROM class_teachers WHERE tenant_id=$1 AND teacher_id=$2 AND class_id = ANY($3::int[]) LIMIT 1`,
+            [tenantId, actor.id, classIds]
+          );
+          if (!isTeacherOfClass.rows.length) {
+            throw Object.assign(new Error('Không có quyền chấm bài của lớp này'), { status: 403 });
+          }
+        }
+      }
       const feedback = data.feedback ?? submission.feedback ?? null;
       const answers = Array.isArray(data.answers) ? data.answers : [];
 
       const currentAnswers = toJson(submission.answers, []);
       const answerMap = new Map(currentAnswers.map((answer) => [Number(answer.questionId || answer.question_id), { ...answer }]));
 
+      // Lấy danh sách câu hỏi và điểm tối đa từ DB
+      const questionRows = await client.query(
+        `SELECT id, score FROM homework_assignment_questions WHERE assignment_id=$1 AND tenant_id=$2`,
+        [submission.assignment_id, tenantId]
+      );
+      const questionMap = new Map(questionRows.rows.map((q) => [Number(q.id), Number(q.score)]));
+
       for (const answer of answers) {
         const questionId = Number(answer.questionId || answer.question_id);
         if (!questionId) continue;
         const existing = answerMap.get(questionId) || {};
         const nextScore = Number(answer.score ?? existing.score ?? 0);
+        if (!Number.isFinite(nextScore) || nextScore < 0) {
+          throw Object.assign(new Error(`Điểm cho câu hỏi #${questionId} không được âm`), { status: 400 });
+        }
+        const maxAllowed = questionMap.get(questionId);
+        if (maxAllowed !== undefined && nextScore > maxAllowed) {
+          throw Object.assign(new Error(`Điểm cho câu hỏi #${questionId} (${nextScore}) vượt quá điểm tối đa (${maxAllowed})`), { status: 400 });
+        }
         answerMap.set(questionId, {
           ...existing,
           ...answer,
           questionId,
-          score: Number.isFinite(nextScore) ? nextScore : 0,
+          score: nextScore,
         });
       }
 

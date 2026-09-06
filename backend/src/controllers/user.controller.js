@@ -39,10 +39,15 @@ class UserController {
         if (nextIsActive === false || nextIsActive === 'false' || nextIsActive === 0 || nextIsActive === '0') {
           return res.status(400).json({ message: 'Không thể tự khoá chính tài khoản đang đăng nhập' });
         }
-
+        // Admin không thể tự gỡ quyền admin của chính mình
         if (Array.isArray(req.body.roles) && !req.body.roles.includes('admin')) {
           return res.status(400).json({ message: 'Không thể tự gỡ quyền admin của chính tài khoản đang đăng nhập' });
         }
+      }
+
+      // Người dùng không phải admin không được thay đổi roles của bất kỳ ai (kể cả chính mình)
+      if (Array.isArray(req.body.roles) && !req.user.roles.includes('admin')) {
+        return res.status(403).json({ message: 'Không có quyền thay đổi vai trò người dùng' });
       }
 
       const user = await userService.update(req.tenant.id, userId, req.body, req.user);

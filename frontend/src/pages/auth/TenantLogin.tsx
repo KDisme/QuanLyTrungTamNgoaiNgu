@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { GraduationCap, Eye, EyeOff } from 'lucide-react';
 import { authApi } from '../../api';
 import { useAuth } from '../../hooks/useAuth';
@@ -103,6 +103,12 @@ export default function TenantLogin() {
             >
               Điền tài khoản demo
             </button>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#64748b' }}>
+            Chưa có tài khoản?{' '}
+            <Link to="/register" style={{ color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>
+              Đăng ký trung tâm mới
+            </Link>
           </div>
         </div>
       </div>

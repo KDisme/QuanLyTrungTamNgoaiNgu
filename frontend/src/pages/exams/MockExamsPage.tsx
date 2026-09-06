@@ -49,6 +49,10 @@ function MockExamForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
 
   const submit = async () => {
     if (!form.title || !form.examSetId) return toast.error('Vui lòng nhập tên kỳ thi và chọn bộ đề');
+    // Validate thời gian bắt đầu và kết thúc
+    if (form.startTime && form.endTime && new Date(form.startTime) >= new Date(form.endTime)) {
+      return toast.error('Thời gian bắt đầu phải trước thời gian kết thúc');
+    }
     const payload = { ...form, examSetId: Number(form.examSetId), classId: form.classId ? Number(form.classId) : null };
     try {
       if (initial) await mockExamsApi.update(initial.id, payload);
@@ -69,10 +73,24 @@ function MockExamForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
         <div className="form-group"><label className="form-label">Lớp tham gia</label><select className="form-select" value={form.classId || ''} onChange={e => setForm((f: any) => ({ ...f, classId: e.target.value }))}><option value="">Không gán lớp</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Bắt đầu</label><input type="datetime-local" className="form-input" value={form.startTime} onChange={e => setForm((f: any) => ({ ...f, startTime: e.target.value }))} /></div>
         <div className="form-group"><label className="form-label">Kết thúc</label><input type="datetime-local" className="form-input" value={form.endTime} onChange={e => setForm((f: any) => ({ ...f, endTime: e.target.value }))} /></div>
-        <div className="form-group"><label className="form-label">Thời gian phút</label><input type="number" className="form-input" value={form.durationMinutes} onChange={e => setForm((f: any) => ({ ...f, durationMinutes: Number(e.target.value) }))} /></div>
+        <div className="form-group"><label className="form-label">Thời gian (phút)</label><input type="number" className="form-input" value={form.durationMinutes} onChange={e => setForm((f: any) => ({ ...f, durationMinutes: Number(e.target.value) }))} /></div>
+        {/* #14: attemptLimit — 0 means unlimited */}
+        <div className="form-group">
+          <label className="form-label">Số lần thi tối đa <span style={{ color: 'var(--gray-500)', fontWeight: 400, fontSize: 12 }}>(0 = không giới hạn)</span></label>
+          <input type="number" min={0} className="form-input" value={form.attemptLimit} onChange={e => setForm((f: any) => ({ ...f, attemptLimit: Number(e.target.value) }))} />
+        </div>
         <div className="form-group"><label className="form-label">Trạng thái</label><select className="form-select" value={form.status} onChange={e => setForm((f: any) => ({ ...f, status: e.target.value }))}><option value="upcoming">Sắp diễn ra</option><option value="active">Đang mở</option><option value="closed">Đã đóng</option><option value="cancelled">Đã huỷ</option></select></div>
+        {/* #14: showResult checkbox */}
+        <div className="form-group" style={{ gridColumn: '1/-1' }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" checked={form.showResult}
+              onChange={e => setForm((f: any) => ({ ...f, showResult: e.target.checked }))} />
+            Hiển thị kết quả cho học viên sau khi chấm xong
+          </label>
+          <span style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 4, display: 'block' }}>Nếu bắt, học viên có thể xem điểm và nhận xét sau khi bài được chấm</span>
+        </div>
         <div className="form-group" style={{ gridColumn: '1/-1' }}><label className="form-label">Ghi chú</label><textarea className="form-textarea" value={form.note} onChange={e => setForm((f: any) => ({ ...f, note: e.target.value }))} /></div>
-        {initial && <label style={{ display: 'flex', gap: 8, alignItems: 'center', gridColumn: '1/-1' }}><input type="checkbox" checked={form.reassign} onChange={e => setForm((f: any) => ({ ...f, reassign: e.target.checked }))} /> Gán lại danh sách học viên theo lớp</label>}
+        {initial && <label style={{ display: 'flex', gap: 8, alignItems: 'center', gridColumn: '1/-1' }}><input type="checkbox" checked={form.reassign} onChange={e => setForm((f: any) => ({ ...f, reassign: e.target.checked }))} /> Gán lại danh sách học viên theo lớp (không xóa học viên đã bắt đầu làm bài)</label>}
       </div>
     </Modal>
   );
@@ -88,7 +106,8 @@ function StudentResultPanel({ detail, student }: { detail: any; student: any }) 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div className="grid-2">
-        <div className="stat-card"><div><div className="stat-value">{student.objective_score ?? 0}</div><div className="stat-label">ĐIỂM TRẮC NGHIỆM</div></div><FileCheck2 color="var(--primary)" /></div>
+        {/* #3: Only show objective_score when results are published */}
+        <div className="stat-card"><div><div className="stat-value">{showResult ? (student.objective_score ?? 0) : '-'}</div><div className="stat-label">ĐIỂM TRẮC NGHIỆM</div></div><FileCheck2 color="var(--primary)" /></div>
         <div className="stat-card"><div><div className="stat-value">{showResult ? (student.total_score ?? '-') : '-'}</div><div className="stat-label">TỔNG ĐIỂM</div></div><CheckCircle2 color="var(--success)" /></div>
       </div>
       <div>Trạng thái: <StatusBadge status={student.status} /></div>
@@ -97,8 +116,20 @@ function StudentResultPanel({ detail, student }: { detail: any; student: any }) 
       {showResult && Object.keys(skillScores).length > 0 && (
         <div className="table-container">
           <table>
-            <thead><tr><th>Kỹ năng</th><th>Điểm</th><th>Đúng/Tổng</th></tr></thead>
-            <tbody>{Object.entries(skillScores).map(([skill, val]: any) => <tr key={skill}><td>{skill}</td><td>{val?.score10 ?? val?.score ?? '-'}</td><td>{val?.correct !== undefined ? `${val.correct}/${val.total}` : '-'}</td></tr>)}</tbody>
+            <thead><tr><th>Kỹ năng</th><th>Điểm</th><th>Đúng/Tổng</th><th>Chi tiết</th></tr></thead>
+            <tbody>{Object.entries(skillScores).map(([skill, val]: any) => (
+              <tr key={skill}>
+                <td>{skill}</td>
+                <td>{val?.score10 ?? val?.score ?? '-'}</td>
+                <td>{val?.correct !== undefined ? `${val.correct}/${val.total}` : '-'}</td>
+                {/* #6: Show Writing Task1/Task2 breakdown for VSTEP */}
+                <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>
+                  {skill === 'Writing' && val?.task1Score !== undefined
+                    ? `Task 1: ${val.task1Score}/10 × 1/3 + Task 2: ${val.task2Score}/10 × 2/3`
+                    : ''}
+                </td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
       )}
@@ -162,6 +193,11 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
 
   const save = async () => {
     if (!student?.id) return toast.error('Không tìm thấy bài thi của học viên');
+    // Cảnh báo khi chấm lại bài đã có điểm
+    if (student?.status === 'graded') {
+      const ok = window.confirm('Bài này đã được chấm trước đó. Bạn có chắc muốn chấm lại và ghi đè điểm cũ không?');
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       const answerScores = questions.map((q: any) => ({
@@ -228,7 +264,16 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Badge variant="blue">Writing: {computed.skillScores.Writing?.score10 ?? '-'}</Badge>
+          {/* #6: Show VSTEP Writing Task1/Task2 breakdown in grading summary */}
+          {computed.skillScores.Writing?.task1Score !== undefined ? (
+            <>
+              <Badge variant="blue">Writing Task 1: {computed.skillScores.Writing.task1Score}/10</Badge>
+              <Badge variant="blue">Writing Task 2: {computed.skillScores.Writing.task2Score}/10</Badge>
+              <Badge variant="orange">Writing Tổng ({'½+⅓'}): {computed.skillScores.Writing.score10}/10</Badge>
+            </>
+          ) : (
+            <Badge variant="blue">Writing: {computed.skillScores.Writing?.score10 ?? '-'}</Badge>
+          )}
           <Badge variant="purple">Speaking: {computed.skillScores.Speaking?.score10 ?? '-'}</Badge>
           <Badge variant="green">Manual total: {computed.manualScore}</Badge>
         </div>
@@ -375,10 +420,10 @@ export default function MockExamsPage() {
                         {canManage && <button className="btn btn-secondary btn-sm" onClick={() => edit(r)}><Pencil size={12} /> Sửa</button>}
                         {canDelete && <button className="btn btn-danger btn-sm" onClick={() => setDeleting(r)}><Trash2 size={12} /> Xoá</button>}
                         {isStudent && <button className="btn btn-secondary btn-sm" onClick={() => view(r)}><Eye size={12} /> Chi tiết</button>}
-                        {isStudent && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => openExamTab(`/${tenantSlug}/student/mock-exams/${r.id}/practice`)}><PlayCircle size={12} /> Luyện thi</button>
-                        )}
-                        {isStudent && r.status === 'active' && !['graded'].includes(attemptStatus) && (
+                        {/* #5: Practice mode removed — uses the same exam questions as the official exam,
+                            which would expose answer keys before students sit the real exam.
+                            Re-enable only when a separate practice question bank is implemented. */}
+                        {isStudent && r.status === 'active' && !['submitted', 'graded'].includes(attemptStatus) && (
                           <button className="btn btn-primary btn-sm" onClick={() => openExamTab(`/${tenantSlug}/student/mock-exams/${r.id}/take`)}><PlayCircle size={12} /> Vào thi thử</button>
                         )}
                       </div>

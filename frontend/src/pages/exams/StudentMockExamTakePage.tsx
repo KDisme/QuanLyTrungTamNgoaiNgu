@@ -18,7 +18,8 @@ type SpeakingFlowState = { sectionKey: string; phase: 'prep' | 'recording' | 'do
 type PreflightStatus = 'avatar' | 'sound' | 'ready';
 
 const SKILL_ORDER = ['Listening', 'Reading', 'Writing', 'Speaking'];
-const VSTEP_SKILL_SECONDS: Record<string, number> = {
+// Thời gian mặc định VSTEP nếu server không cung cấp (fallback)
+const VSTEP_DEFAULT_SKILL_SECONDS: Record<string, number> = {
   Listening: 47 * 60,
   Reading: 60 * 60,
   Writing: 60 * 60,
@@ -100,7 +101,15 @@ const isPrimarySpeakingQuestion = (q: any, allQuestions: any[]) => {
     .sort((a: any, b: any) => Number(a.sequence_no || a.sequenceNo || a.id) - Number(b.sequence_no || b.sequenceNo || b.id))[0];
   return Number(first?.id) === Number(q.id);
 };
-const getAnswerableQuestions = (allQuestions: any[]) => allQuestions.filter((q: any) => !isSpeakingQuestion(q) || isPrimarySpeakingQuestion(q, allQuestions));
+// #7: For VSTEP, only the primary question per Part carries the shared recording.
+// For TOEIC Speaking, each question has its own independent recording.
+const isSpeakingQuestionForRecordingGroup = (q: any, allQuestions: any[], isVstepExam: boolean) => {
+  if (!isSpeakingQuestion(q)) return false;
+  if (isVstepExam) return isPrimarySpeakingQuestion(q, allQuestions); // VSTEP: one recording per Part
+  return true; // TOEIC: each speaking question has its own recording
+};
+const getAnswerableQuestions = (allQuestions: any[], isVstepExam: boolean) =>
+  allQuestions.filter((q: any) => !isSpeakingQuestion(q) || isSpeakingQuestionForRecordingGroup(q, allQuestions, isVstepExam));
 const getSkillIndex = (skill: string) => SKILL_ORDER.indexOf(skill);
 const getAnsweredQuestionIds = (answers: Record<number, any>, recordings: Record<number, RecordingState>) => {
   const ids = new Set<number>();
@@ -235,10 +244,17 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
 
   const questions = useMemo(() => exam?.questions || [], [exam]);
   const studentRow = useMemo(() => exam?.students?.[0], [exam]);
-  const answerableQuestions = useMemo(() => getAnswerableQuestions(questions), [questions]);
+  const isVstep = isVstepFormat(exam);
+  // #12: Read oneWayNavigation from exam settings instead of hard-coding VSTEP
+  const examSettings = useMemo(() => {
+    const raw = exam?.exam_set_settings || exam?.settings || {};
+    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return {}; } }
+    return raw || {};
+  }, [exam]);
+  const isOneWay = examSettings.oneWayNavigation === true;
+  const answerableQuestions = useMemo(() => getAnswerableQuestions(questions, isVstep), [questions, isVstep]);
   const canSubmit = mode === 'mock' && exam?.status === 'active' && studentRow && !['submitted','graded'].includes(studentRow.status);
   const isPractice = mode === 'practice';
-  const isVstep = isVstepFormat(exam);
 
   useEffect(() => {
     if (!studentRow?.answers?.length) return;
@@ -293,6 +309,7 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
   const activeSpeakingAudioKey = isSpeakingSection ? getSpeakingAudioKey(exam, activeSection) : '';
   const activeSpeakingTiming = isSpeakingSection ? getSpeakingTiming(activeSection) : { prepSeconds: 0, responseSeconds: 0 };
   const answeredIds = useMemo(() => getAnsweredQuestionIds(answers, recordings), [answers, recordings]);
+  // #18: answeredCount uses answerableQuestions as both numerator and denominator for consistency
   const answeredCount = answerableQuestions.filter((q: any) => answeredIds.has(Number(q.id))).length;
   const sampleAudioUrl = useMemo(() => {
     const listeningSection = sections.find((s: any) => s.skill === 'Listening');
@@ -300,7 +317,14 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
   }, [sections, questions]);
 
   const getSkillSeconds = (skill: string) => {
-    if (isVstep && VSTEP_SKILL_SECONDS[skill]) return VSTEP_SKILL_SECONDS[skill];
+    if (isVstep) {
+      // Ưu tiên lấy từ exam settings (server), fallback về default nếu không có
+      const examSettings = exam?.exam_set_settings || exam?.settings || {};
+      const skillKey = `${skill.toLowerCase()}Seconds`;
+      if (examSettings[skillKey]) return Number(examSettings[skillKey]);
+      // Fallback: tính từ duration_minutes nếu không phải VSTEP chuẩn
+      return VSTEP_DEFAULT_SKILL_SECONDS[skill] || Math.max(1, Number(exam?.duration_minutes || 0) * 60);
+    }
     return Math.max(1, Number(exam?.duration_minutes || 0) * 60);
   };
 
@@ -330,18 +354,18 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
     setUnlockedSkillIndex(Math.max(unlockedSkillIndex, targetIndex));
     setActiveSectionKey(section.key);
     setSkillRemainingSeconds(getSkillSeconds(section.skill));
-    if (section.skill === 'Speaking' && mode === 'mock') setSpeakingIntroSeconds(60);
+    if (section.skill === 'Speaking' && mode === 'mock' && isOneWay) setSpeakingIntroSeconds(60);
     return true;
   };
 
   const switchSection = (key: string) => {
     let target = sections.find((s: any) => s.key === key);
     if (!target) return;
-    if (mode === 'mock' && isVstep && activeSkill === 'Speaking' && target.skill === 'Speaking' && target.key !== activeSectionKey) {
+    if (isOneWay && activeSkill === 'Speaking' && target.skill === 'Speaking' && target.key !== activeSectionKey) {
       toast.error('Phần Speaking tự động chuyển câu khi hết thời gian. Bạn không thể bấm chuyển Part thủ công.');
       return;
     }
-    if (mode === 'mock' && isVstep && target.skill === 'Speaking' && activeSkill !== 'Speaking') {
+    if (isOneWay && target.skill === 'Speaking' && activeSkill !== 'Speaking') {
       target = sections.find((s: any) => s.skill === 'Speaking') || target;
     }
     const targetSkillIndex = getSkillIndex(target.skill);
@@ -350,13 +374,13 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
       setActiveSectionKey(target.key);
       return;
     }
-    if (mode === 'mock' && isVstep) {
+    if (isOneWay) {
       if (targetSkillIndex < unlockedSkillIndex) {
         toast.error('Bạn đã chuyển sang kỹ năng mới nên không thể quay lại kỹ năng trước đó.');
         return;
       }
       if (targetSkillIndex > unlockedSkillIndex + 1) {
-        toast.error('Bài thi VSTEP cần làm theo thứ tự Nghe → Đọc → Viết → Nói.');
+        toast.error('Bài thi cần làm theo thứ tự tuần tự giữa các kỹ năng.');
         return;
       }
       const missing = getUnansweredInSkill(activeSkill);
@@ -377,8 +401,12 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
   const startExam = async () => {
     if (mode !== 'mock') return;
     if (!canSubmit) return toast.error('Kỳ thi chưa mở hoặc bạn không thể làm bài');
+    let serverRemaining: number | null = null;
     try {
-      if (studentRow?.id) await mockExamsApi.start(studentRow.id);
+      if (studentRow?.id) {
+        const res = await mockExamsApi.start(studentRow.id);
+        serverRemaining = typeof res.data?.remaining_seconds === 'number' ? res.data.remaining_seconds : null;
+      }
     } catch (err: any) {
       return toast.error(err.response?.data?.message || 'Không thể bắt đầu bài thi');
     }
@@ -388,7 +416,7 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
     const first = sections[0];
     if (first) {
       setActiveSectionKey(first.key);
-      setSkillRemainingSeconds(getSkillSeconds(first.skill));
+      setSkillRemainingSeconds(serverRemaining !== null ? serverRemaining : getSkillSeconds(first.skill));
     }
   };
 
@@ -613,7 +641,8 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
         const latest = Object.values(answers).filter((a: any) => a?.questionId && (a.selectedOptionId || a.answerText));
-        for (const answer of latest) await mockExamsApi.saveAnswer(studentRow.id, answer as object);
+        if (!latest.length) return;
+        await mockExamsApi.saveAnswers(studentRow.id, latest as object[]);
         lastAutoSaveRef.current = JSON.stringify(latest.map((a: any) => ({ q: a.questionId, o: a.selectedOptionId || null, t: a.answerText || '', wc: a.wordCount || 0 })));
       } catch (err: any) {
         toast.error(err.response?.data?.message || 'Tự động lưu đáp án chưa thành công');
@@ -622,47 +651,17 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [answers, mode, started, studentRow?.id, submitting]);
 
-
-
-  const resetInProgressIfNeeded = useCallback(async () => {
-    if (mode !== 'mock' || !started || !studentRow?.id || submitting || submittedRef.current) return;
-    try {
-      await mockExamsApi.resetInProgress(studentRow.id);
-    } catch {
-      // Không chặn thao tác thoát nếu cập nhật trạng thái không thành công.
-    }
-  }, [mode, started, studentRow?.id, submitting]);
-
-  useEffect(() => {
-    if (mode !== 'mock' || !started || !studentRow?.id || submittedRef.current) return;
-    const handlePageHide = () => {
-      if (submittedRef.current) return;
-      const token = localStorage.getItem('token');
-      const tenant = localStorage.getItem('tenantSlug') || 'demo';
-      try {
-        fetch(`/api/${tenant}/mock-exam-students/${studentRow.id}/reset-in-progress`, {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          keepalive: true,
-        });
-      } catch {
-        // ignore
-      }
-    };
-    window.addEventListener('pagehide', handlePageHide);
-    return () => window.removeEventListener('pagehide', handlePageHide);
-  }, [mode, started, studentRow?.id]);
-
   const handleExit = async () => {
     pauseAllAudio();
-    await resetInProgressIfNeeded();
     navigate(-1);
   };
 
   const buildPayload = async () => {
     if (!studentRow?.id) throw new Error('Không tìm thấy phiếu thi của bạn');
     const payload: any[] = [];
-    const speakingQuestions = questions.filter((q: any) => isSpeakingQuestion(q) && isPrimarySpeakingQuestion(q, questions));
+    const speakingQuestions = isVstep
+      ? questions.filter((q: any) => isSpeakingQuestion(q) && isPrimarySpeakingQuestion(q, questions))
+      : questions.filter((q: any) => isSpeakingQuestion(q));
     for (const q of speakingQuestions) {
       const rec = recordings[q.id];
       if (!rec?.blob) continue;
@@ -889,22 +888,23 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
           <h1>{exam.title}</h1>
           <p>{exam.exam_set_title} • VSTEP: Nghe → Đọc → Viết → Nói</p>
           <div className="preflight-steps">
-            <button className={`preflight-step ${preflightStatus === 'avatar' ? 'active' : ''}`} onClick={() => setPreflightStatus('avatar')}>1. Chụp avatar</button>
+            <button className={`preflight-step ${preflightStatus === 'avatar' ? 'active' : ''}`} onClick={() => setPreflightStatus('avatar')}>1. Kiểm tra camera</button>
             <button className={`preflight-step ${preflightStatus === 'sound' ? 'active' : ''}`} onClick={() => setPreflightStatus('sound')}>2. Kiểm tra âm thanh</button>
             <button className={`preflight-step ${preflightStatus === 'ready' ? 'active' : ''}`} onClick={() => setPreflightStatus('ready')}>3. Nhận đề</button>
           </div>
           {preflightStatus === 'avatar' && (
             <div className="preflight-panel">
               <Camera size={42} />
-              <h2>Chụp ảnh avatar</h2>
-              <p>Chọn hoặc chụp ảnh bằng camera thiết bị để mô phỏng bước xác minh trước khi thi.</p>
+              {/* #17: Renamed from 'Chụp ảnh xác nhận danh tính' to 'Kiểm tra camera' — avatar is not uploaded to server */}
+              <h2>Kiểm tra camera</h2>
+              <p>Bấm chụp ảnh để kiểm tra camera hoạt động tốt trước khi vào thi. Ảnh không được lưu lên hệ thống.</p>
               <input type="file" accept="image/*" capture="user" onChange={e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 if (avatarUrl) URL.revokeObjectURL(avatarUrl);
                 setAvatarUrl(URL.createObjectURL(file));
               }} />
-              {avatarUrl && <img src={avatarUrl} alt="avatar" className="avatar-preview" />}
+              {avatarUrl && <img src={avatarUrl} alt="camera-preview" className="avatar-preview" />}
               <button className="btn btn-primary" onClick={() => setPreflightStatus('sound')} disabled={!avatarUrl}>Tiếp tục kiểm tra âm thanh</button>
             </div>
           )}
@@ -952,7 +952,8 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
         </div>
         <div className="exam-timer">{isPractice ? 'Luyện thi' : isSpeakingSection && speakingFlow ? formatSeconds(speakingFlow.remaining) : formatSeconds(skillRemainingSeconds ?? getSkillSeconds(activeSkill))}</div>
         <div className="exam-top-right">
-          <span>Đã trả lời: {answeredCount}/{questions.length}</span>
+          {/* #18: answeredCount/answerableQuestions.length for correct denominator */}
+          <span>Đã trả lời: {answeredCount}/{answerableQuestions.length}</span>
           {!isPractice && <button className="btn btn-primary" onClick={submit} disabled={!canSubmit || submitting}><Send size={14} /> {submitting ? 'Đang nộp...' : 'Nộp bài'}</button>}
         </div>
       </div>
@@ -1032,7 +1033,7 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
                 title={speakingManualLocked ? 'Speaking sẽ tự động chuyển Part khi hết thời gian' : undefined}
               >{section.part.replace(`${skill} `, '')}</button>;
             })}
-            <span className="exam-skill-label">{skill} - {isVstep && VSTEP_SKILL_SECONDS[skill] ? Math.round(VSTEP_SKILL_SECONDS[skill] / 60) : skillSections.reduce((sum: number, s: any) => sum + s.questions.length, 0)}</span>
+            <span className="exam-skill-label">{skill} - {isVstep && VSTEP_DEFAULT_SKILL_SECONDS[skill] ? Math.round(VSTEP_DEFAULT_SKILL_SECONDS[skill] / 60) : skillSections.reduce((sum: number, s: any) => sum + s.questions.length, 0)}</span>
           </div>;
         })}
         {!isPractice && <button className="btn btn-primary" onClick={submit} disabled={!canSubmit || submitting}><Send size={14} /> Nộp bài</button>}

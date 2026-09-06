@@ -214,27 +214,23 @@ class ScheduleService {
       note: note !== undefined ? note : current.note,
     };
 
-    // Skip conflict check when restoring a cancelled schedule
-    const isRestoring = current.status === 'cancelled' && next.status === 'scheduled'
-      && !sessionDate && !startTime && !endTime && roomId === undefined && teacherId === undefined;
+    // Kiểm tra conflict kể cả khi khôi phục lịch đã hủy
+    // (trước đây bỏ qua — điều này có thể tạo 2 lớp cùng phòng/giáo viên cùng giờ)
+    const conflicts = await this._findConflicts(tenantId, {
+      sessionDate: next.session_date,
+      startTime: next.start_time,
+      endTime: next.end_time,
+      roomId: next.room_id,
+      teacherId: next.teacher_id,
+      classId: current.class_id,
+      excludeScheduleId: scheduleId,
+    });
 
-    if (!isRestoring) {
-      const conflicts = await this._findConflicts(tenantId, {
-        sessionDate: next.session_date,
-        startTime: next.start_time,
-        endTime: next.end_time,
-        roomId: next.room_id,
-        teacherId: next.teacher_id,
-        classId: current.class_id,
-        excludeScheduleId: scheduleId,
-      });
-
-      if (conflicts.length) {
+    if (conflicts.length) {
         const err = new Error('Schedule conflict');
-        err.code = 'SCHEDULE_CONFLICT';
-        err.details = { conflicts };
-        throw err;
-      }
+      err.code = 'SCHEDULE_CONFLICT';
+      err.details = { conflicts };
+      throw err;
     }
 
     const result = await pool.query(

@@ -11,7 +11,8 @@ class HomeworkController {
 
   async getById(req, res, next) {
     try {
-      const item = await homeworkService.getAssignment(req.tenant.id, parseInt(req.params.id, 10), req.user, req.query.password || null);
+      const password = req.headers['x-homework-password'] || req.query.password || null;
+      const item = await homeworkService.getAssignment(req.tenant.id, parseInt(req.params.id, 10), req.user, password);
       if (!item) return res.status(404).json({ message: 'Homework assignment not found' });
       res.json(item);
     } catch (err) {

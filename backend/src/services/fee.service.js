@@ -152,7 +152,8 @@ class FeeService {
 
       let amount = parseFloat(totalAmount) || 0;
       if (feeTemplateId && !amount) {
-        const tmpl = await client.query('SELECT amount FROM fee_templates WHERE id=$1', [feeTemplateId]);
+        // Thêm tenant_id để ngăn dùng template của tenant khác
+        const tmpl = await client.query('SELECT amount FROM fee_templates WHERE id=$1 AND tenant_id=$2', [feeTemplateId, tenantId]);
         if (tmpl.rows.length) amount = parseFloat(tmpl.rows[0].amount);
       }
 
@@ -172,6 +173,17 @@ class FeeService {
           'INSERT INTO fee_collection_classes (tenant_id, collection_id, class_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
           [tenantId, collection.id, classId]
         );
+      }
+
+      // Nếu scope theo từng học viên (scopeType='student'), tạo sẵn item cho các studentIds
+      if (scopeType === 'student') {
+        for (const studentId of (studentIds || [])) {
+          await client.query(
+            `INSERT INTO fee_collection_items (tenant_id, collection_id, student_id, amount_due)
+             VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+            [tenantId, collection.id, studentId, amount]
+          );
+        }
       }
 
       await client.query('COMMIT');
@@ -286,6 +298,11 @@ class FeeService {
       const item = itemCheck.rows[0];
       if (item.collection_status !== 'active') throw new Error('Đợt thu chưa được kích hoạt');
       if (parseFloat(amount) <= 0) throw new Error('Số tiền không hợp lệ');
+      // Chặn thu vượt khoản phải nộp
+      const remaining = parseFloat(item.amount_due) - parseFloat(item.amount_paid);
+      if (parseFloat(amount) > remaining + 0.01) { // 0.01 để bù sai số float
+        throw new Error(`Số tiền thu (${Number(amount).toLocaleString('vi-VN')}đ) vượt quá số còn nợ (${remaining.toLocaleString('vi-VN')}đ)`);
+      }
 
       const txResult = await client.query(
         `INSERT INTO fee_transactions (tenant_id, item_id, amount, payment_method, collected_by, note, paid_date)
@@ -456,16 +473,16 @@ class FeeService {
         `SELECT payment_method, COALESCE(SUM(amount),0) as total, COUNT(*) as count
          FROM fee_transactions
          WHERE tenant_id=$1 AND is_cancelled=FALSE
-           AND EXTRACT(MONTH FROM paid_at)=$2 AND EXTRACT(YEAR FROM paid_at)=$3
+           AND EXTRACT(MONTH FROM COALESCE(paid_date, paid_at))=$2 AND EXTRACT(YEAR FROM COALESCE(paid_date, paid_at))=$3
          GROUP BY payment_method`,
         [tenantId, m, y]
       ),
       pool.query(
-        `SELECT DATE(paid_at) as day, SUM(amount) as amount
+        `SELECT DATE(COALESCE(paid_date, paid_at)) as day, SUM(amount) as amount
          FROM fee_transactions
          WHERE tenant_id=$1 AND is_cancelled=FALSE
-           AND EXTRACT(MONTH FROM paid_at)=$2 AND EXTRACT(YEAR FROM paid_at)=$3
-         GROUP BY DATE(paid_at) ORDER BY day`,
+           AND EXTRACT(MONTH FROM COALESCE(paid_date, paid_at))=$2 AND EXTRACT(YEAR FROM COALESCE(paid_date, paid_at))=$3
+         GROUP BY DATE(COALESCE(paid_date, paid_at)) ORDER BY day`,
         [tenantId, m, y]
       ),
       pool.query(

@@ -9,6 +9,7 @@ import { getPrimaryRole, getRoleHome } from './config/roleConfig';
 import LandingPage from './pages/LandingPage';
 import PortalLogin from './pages/auth/PortalLogin';
 import TenantLogin from './pages/auth/TenantLogin';
+import RegisterPage from './pages/auth/RegisterPage';
 import Dashboard from './pages/dashboard/Dashboard';
 import RoleDashboard from './pages/portal/RoleDashboard';
 import UsersPage from './pages/users/UsersPage';
@@ -40,6 +41,8 @@ import { DEFAULT_TENANT_SLUG } from './api';
 import HomeworkPreviewPage from './pages/student/HomeworkPreviewPage';
 import HomeworkFormPage from './pages/homework/HomeworkFormPage';
 import ActivityLogPage from './pages/admin/ActivityLogPage';
+import BranchesPage from './pages/branches/BranchesPage';
+import BranchDetailPage from './pages/branches/BranchDetailPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAuthReady } = useAuth();
@@ -117,20 +120,7 @@ function TenantApp() {
           </RoleRoute>
         </ProtectedRoute>
       } />
-      <Route path="staff/homework/create" element={
-        <ProtectedRoute>
-          <RoleRoute allow={['staff']}>
-            <HomeworkFormPage />
-          </RoleRoute>
-        </ProtectedRoute>
-      } />
-      <Route path="staff/homework/:id/edit" element={
-        <ProtectedRoute>
-          <RoleRoute allow={['staff']}>
-            <HomeworkFormPage />
-          </RoleRoute>
-        </ProtectedRoute>
-      } />
+      {/* Staff không được tạo/sửa bài tập — backend chỉ cho admin/teacher */}
       <Route path="teacher/homework/create" element={
         <ProtectedRoute>
           <RoleRoute allow={['teacher']}>
@@ -164,8 +154,8 @@ function TenantApp() {
         <Route path="admin/students" element={<RoleRoute allow={['admin']}><StudentsPage /></RoleRoute>} />
         <Route path="admin/students/:id" element={<RoleRoute allow={['admin']}><StudentDetailPage /></RoleRoute>} />
         <Route path="admin/users" element={<RoleRoute allow={['admin']}><UsersPage /></RoleRoute>} />
-        <Route path="admin/branches" element={<Navigate to="../classes" replace />} />
-        <Route path="admin/branches/:id" element={<Navigate to="../classes" replace />} />
+        <Route path="admin/branches" element={<RoleRoute allow={['admin']}><BranchesPage /></RoleRoute>} />
+        <Route path="admin/branches/:id" element={<RoleRoute allow={['admin']}><BranchDetailPage /></RoleRoute>} />
         <Route path="admin/classes" element={<RoleRoute allow={['admin']}><ClassesPage /></RoleRoute>} />
         <Route path="admin/classes/:id" element={<RoleRoute allow={['admin']}><ClassDetailPage /></RoleRoute>} />
         <Route path="admin/schedules" element={<RoleRoute allow={['admin']}><SchedulesPage /></RoleRoute>} />
@@ -176,10 +166,10 @@ function TenantApp() {
         <Route path="admin/mock-exams" element={<RoleRoute allow={['admin']}><MockExamsPage /></RoleRoute>} />
         <Route path="admin/homework" element={<RoleRoute allow={['admin']}><HomeworkAssignmentsPage /></RoleRoute>} />
         <Route path="admin/activity-logs" element={<RoleRoute allow={['admin']}><ActivityLogPage /></RoleRoute>} />
-        <Route path="admin/tuition" element={<Navigate to="../dashboard" replace />} />
-        <Route path="admin/expenses" element={<Navigate to="../dashboard" replace />} />
-        <Route path="admin/fee-templates" element={<Navigate to="../dashboard" replace />} />
-        <Route path="admin/settings" element={<Navigate to="../dashboard" replace />} />
+        <Route path="admin/tuition" element={<RoleRoute allow={['admin', 'staff']}><TuitionPage /></RoleRoute>} />
+        <Route path="admin/expenses" element={<RoleRoute allow={['admin', 'staff']}><ExpensesPage /></RoleRoute>} />
+        <Route path="admin/fee-templates" element={<RoleRoute allow={['admin', 'staff']}><FeeTemplatesPage /></RoleRoute>} />
+        <Route path="admin/settings" element={<RoleRoute allow={['admin']}><SettingsPage /></RoleRoute>} />
 
         {/* Staff Portal */}
         <Route path="staff" element={<WrongPortalGuard role="staff"><RoleRedirect /></WrongPortalGuard>} />
@@ -191,8 +181,8 @@ function TenantApp() {
         <Route path="staff/schedules" element={<RoleRoute allow={['staff']}><SchedulesPage /></RoleRoute>} />
         <Route path="staff/attendance" element={<RoleRoute allow={['staff']}><AttendancePage /></RoleRoute>} />
         <Route path="staff/attendance/take/:scheduleId" element={<RoleRoute allow={['staff']}><AttendanceTakePage /></RoleRoute>} />
-        <Route path="staff/tuition" element={<Navigate to="../dashboard" replace />} />
-        <Route path="staff/fee-templates" element={<Navigate to="../dashboard" replace />} />
+        <Route path="staff/tuition" element={<RoleRoute allow={['staff']}><TuitionPage /></RoleRoute>} />
+        <Route path="staff/fee-templates" element={<RoleRoute allow={['staff']}><FeeTemplatesPage /></RoleRoute>} />
         <Route path="staff/exam-questions" element={<RoleRoute allow={['staff']}><QuestionBankPage /></RoleRoute>} />
         <Route path="staff/exam-sets" element={<RoleRoute allow={['staff']}><ExamSetsPage /></RoleRoute>} />
         <Route path="staff/mock-exams" element={<RoleRoute allow={['staff']}><MockExamsPage /></RoleRoute>} />
@@ -221,7 +211,7 @@ function TenantApp() {
         <Route path="student/my-classes/:id" element={<RoleRoute allow={['student']}><ClassDetailPage /></RoleRoute>} />
         <Route path="student/my-schedule" element={<RoleRoute allow={['student']}><SchedulesPage /></RoleRoute>} />
         <Route path="student/my-attendance" element={<RoleRoute allow={['student']}><StudentAttendancePage /></RoleRoute>} />
-        <Route path="student/my-fees" element={<Navigate to="../dashboard" replace />} />
+        <Route path="student/my-fees" element={<RoleRoute allow={['student']}><StudentFeesPage /></RoleRoute>} />
         <Route path="student/mock-exams" element={<RoleRoute allow={['student']}><MockExamsPage /></RoleRoute>} />
         <Route path="student/homework" element={<RoleRoute allow={['student']}><HomeworkAssignmentsPage /></RoleRoute>} />
         <Route path="student/homework/:id/preview" element={<RoleRoute allow={['student']}><HomeworkPreviewPage /></RoleRoute>} />
@@ -263,7 +253,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-      <Route path="/portal/login" element={<Navigate to={`/${DEFAULT_TENANT_SLUG}/login`} replace />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/portal/login" element={<PortalLogin />} />
       <Route path="/portal/select" element={<Navigate to={`/${DEFAULT_TENANT_SLUG}/login`} replace />} />
       <Route path="/:tenantSlug/*" element={<TenantApp />} />
       <Route path="*" element={

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Building2, ArrowRight } from 'lucide-react';
 import { authApi } from '../../api';
 import toast from 'react-hot-toast';
@@ -38,7 +38,7 @@ export default function PortalLogin() {
             <Building2 size={26} />
           </div>
           <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-            Đăng nhập Portal
+            Đăng nhập
           </h2>
           <p style={{ textAlign: 'center', color: 'var(--gray-500)', fontSize: 13, marginBottom: 24 }}>
             Nhập email để tìm trung tâm của bạn
@@ -79,10 +79,17 @@ export default function PortalLogin() {
             </div>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
-            <a href="/" style={{ color: 'var(--gray-400)', fontSize: 12.5, textDecoration: 'none' }}>
+          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--gray-500)' }}>
+            Chưa có tài khoản?{' '}
+            <Link to="/register" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
+              Đăng ký trung tâm mới
+            </Link>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <Link to="/" style={{ color: 'var(--gray-400)', fontSize: 12.5, textDecoration: 'none' }}>
               ← Quay lại trang chủ
-            </a>
+            </Link>
           </div>
         </div>
       </div>

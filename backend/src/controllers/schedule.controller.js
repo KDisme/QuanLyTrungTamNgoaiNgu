@@ -141,14 +141,32 @@ class AttendanceController {
       try {
         await client.query('BEGIN');
         const scheduleResult = await client.query(
-          `SELECT id, class_id FROM schedules WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
+          `SELECT id, class_id, status, session_date FROM schedules WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
           [scheduleId, req.tenant.id]
         );
         if (!scheduleResult.rows.length) {
           await client.query('ROLLBACK');
           return res.status(404).json({ message: 'Schedule not found' });
         }
-        const classId = scheduleResult.rows[0].class_id;
+        const schedule = scheduleResult.rows[0];
+        const classId = schedule.class_id;
+
+        // Không điểm danh buổi đã hủy
+        if (schedule.status === 'cancelled') {
+          await client.query('ROLLBACK');
+          return res.status(422).json({ message: 'Không thể điểm danh buổi học đã bị hủy' });
+        }
+        // Không điểm danh buổi trong tương lai
+        const today = new Date().toISOString().split('T')[0];
+        if (String(schedule.session_date).substring(0, 10) > today) {
+          await client.query('ROLLBACK');
+          return res.status(422).json({ message: 'Không thể điểm danh buổi học trong tương lai' });
+        }
+        // Danh sách records không được rỗng
+        if (!Array.isArray(records) || records.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(422).json({ message: 'Vui lòng cung cấp danh sách điểm danh' });
+        }
 
         for (const rec of records) {
           const memberResult = await client.query(

@@ -171,14 +171,7 @@ ufw status
 
 ## Seed Database
 
-Pipeline tự động chạy migration. Dữ liệu seed chỉ cần import một lần sau lần deploy đầu tiên.
-
-Ví dụ nếu seed là file SQL:
-
-```bash
-docker cp seed.sql quanly-postgres:/tmp/seed.sql
-docker exec -it quanly-postgres psql -U postgres -d QLTTNN -f /tmp/QLTTNN.sql
-```
+Pipeline không dùng file SQL seed. Database mặc định là `db0807`, user `postgres`.
 
 Vì dữ liệu production hiện không cần giữ lại, có thể reset database bằng cách xóa Docker volume:
 

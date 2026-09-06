@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { authApi } from '../api';
 
 interface User {
   id: number;
@@ -28,6 +29,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenantName, setTenantName] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('tenantSlug');
+    localStorage.removeItem('tenantName');
+    setUser(null);
+    setTenantSlug(null);
+    setTenantName(null);
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
@@ -36,10 +47,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (token && savedUser && savedSlug) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
         setTenantSlug(savedSlug);
         setTenantName(savedName);
-      } catch {}
+
+        // Xác thực lại với server qua /auth/me để cập nhật roles mới nhất và kiểm tra token còn hiệu lực
+        authApi.me()
+          .then((res: any) => {
+            if (res.data?.user) {
+              const freshUser: User = {
+                id: res.data.user.id,
+                fullName: res.data.user.full_name || res.data.user.fullName || parsed.fullName,
+                email: res.data.user.email,
+                phone: res.data.user.phone,
+                roles: res.data.user.roles || [],
+                tenantId: res.data.user.tenant_id || res.data.user.tenantId,
+              };
+              setUser(freshUser);
+              localStorage.setItem('user', JSON.stringify(freshUser));
+            }
+          })
+          .catch(() => {
+            // Token hết hạn hoặc tài khoản bị khóa -> logout
+            logout();
+          })
+          .finally(() => {
+            setIsAuthReady(true);
+          });
+        return;
+      } catch {
+        logout();
+      }
     }
     setIsAuthReady(true);
   }, []);
