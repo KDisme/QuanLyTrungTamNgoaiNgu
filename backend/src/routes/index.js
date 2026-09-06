@@ -21,6 +21,7 @@ const dashboardCtrl = require('../controllers/dashboard.controller');
 const examCtrl = require('../controllers/exam.controller');
 const homeworkCtrl = require('../controllers/homework.controller');
 const homeworkBankCtrl = require('../controllers/homeworkQuestionBank.controller');
+const homeworkAdaptiveCtrl = require('../controllers/homeworkAdaptive.controller');
 const notificationCtrl = require('../controllers/notification.controller');
 const multer = require('multer');
 const path = require('path');
@@ -172,6 +173,8 @@ tenantRouter.post('/homework-question-bank/bulk', authenticate, requireRole('adm
 tenantRouter.put('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.update);
 tenantRouter.delete('/homework-question-bank/:id', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.delete);
 tenantRouter.get('/homework-question-bank/:id/usage', authenticate, requireRole('admin', 'teacher'), homeworkBankCtrl.getUsage);
+tenantRouter.post('/homework-assignments/:id/adaptive/start', authenticate, homeworkAdaptiveCtrl.start);
+tenantRouter.post('/homework-adaptive-sessions/:sessionId/answer', authenticate, homeworkAdaptiveCtrl.answer);
 
 tenantRouter.get('/notifications', authenticate, notificationCtrl.list);
 tenantRouter.get('/notifications/unread-count', authenticate, notificationCtrl.unreadCount);

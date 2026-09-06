@@ -172,32 +172,62 @@ export default function HomeworkFormBody({ initial, onDone }: { initial?: any; o
             />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div style={{ fontWeight: 700 }}>Danh sách câu hỏi</div>
-              <div style={{ color: 'var(--gray-500)', fontSize: 13 }}>Hỗ trợ True/False, trắc nghiệm 4 đáp án và tự luận.</div>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-secondary" onClick={() => setShowBankPicker(true)}><Library size={14} /> Chọn từ ngân hàng</button>
-              <button className="btn btn-secondary" onClick={addQuestion}><Plus size={14} /> Thêm câu</button>
-            </div>
+          <div style={{ border: '1px solid var(--gray-200)', borderRadius: 10, padding: 14, display: 'grid', gap: 10, background: '#fafafa' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={!!form.isAdaptive}
+                onChange={(e) => setForm((prev: any) => ({ ...prev, isAdaptive: e.target.checked }))}
+              />
+              <div>
+                <div style={{ fontWeight: 700 }}>Bài tập thiết ứng (IRT)</div>
+                <div style={{ color: 'var(--gray-500)', fontSize: 13 }}>
+                  Hệ thống tự chọn câu hỏi từ ngân hàng dựa theo năng lực từng học sinh, không cần chọn sẵn câu hỏi.
+                </div>
+              </div>
+            </label>
+            {form.isAdaptive && (
+              <div className="form-group" style={{ maxWidth: 220, marginLeft: 30 }}>
+                <label className="form-label">Số câu hỏi mỗi học sinh sẽ làm</label>
+                <input
+                  type="number" min={1} className="form-input"
+                  value={form.adaptiveQuestionCount}
+                  onChange={(e) => setForm((prev: any) => ({ ...prev, adaptiveQuestionCount: Number(e.target.value) }))}
+                />
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'grid', gap: 12 }}>
-            {form.questions.map((question: any, index: number) => (
-              <QuestionEditor
-                key={`${index}-${question.questionType}`}
-                question={question}
-                index={index}
-                disabledRemove={form.questions.length === 1}
-                onChangeType={changeQuestionType}
-                onChangeField={setQuestion}
-                onChangeOption={updateOption}
-                onSaveToBank={saveQuestionToBank}
-                onRemove={removeQuestion}
-              />
-            ))}
-          </div>
+          {!form.isAdaptive && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Danh sách câu hỏi</div>
+                  <div style={{ color: 'var(--gray-500)', fontSize: 13 }}>Hỗ trợ True/False, trắc nghiệm 4 đáp án và tự luận.</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-secondary" onClick={() => setShowBankPicker(true)}><Library size={14} /> Chọn từ ngân hàng</button>
+                  <button className="btn btn-secondary" onClick={addQuestion}><Plus size={14} /> Thêm câu</button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gap: 12 }}>
+                {form.questions.map((question: any, index: number) => (
+                  <QuestionEditor
+                    key={`${index}-${question.questionType}`}
+                    question={question}
+                    index={index}
+                    disabledRemove={form.questions.length === 1}
+                    onChangeType={changeQuestionType}
+                    onChangeField={setQuestion}
+                    onChangeOption={updateOption}
+                    onSaveToBank={saveQuestionToBank}
+                    onRemove={removeQuestion}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -42,7 +42,7 @@ export default function HomeworkAssignmentsPage() {
       <div className="page-header flex items-center justify-between">
         <div>
           <h1 className="page-title">Bài tập về nhà</h1>
-          <p className="page-subtitle">Tạo homework như Google Forms: True/False, trắc nghiệm 4 đáp án và tự luận.</p>
+          <p className="page-subtitle">Tạo homework: True/False, trắc nghiệm 4 đáp án và tự luận.</p>
         </div>
         {canManage && <button className="btn btn-primary" onClick={() => navigate('create')}><Plus size={15} /> Tạo bài tập</button>}
       </div>

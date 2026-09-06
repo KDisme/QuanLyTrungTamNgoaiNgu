@@ -25,6 +25,10 @@ function camelItem(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     usageCount: toInt(row.usage_count, 0),
+    irtA: row.irt_a != null ? Number(row.irt_a) : null,
+    irtB: row.irt_b != null ? Number(row.irt_b) : null,
+    irtC: row.irt_c != null ? Number(row.irt_c) : null,
+    irtCalibratedAt: row.irt_calibrated_at,
   } : row;
 }
 
@@ -94,10 +98,16 @@ class HomeworkQuestionBankService {
     if (!questionText) {
       throw Object.assign(new Error('Vui lòng nhập nội dung câu hỏi'), { status: 400 });
     }
+    // IRT: nếu không truyền thì giữ giá trị "trung tính" đúng như default trong DB —
+    // tránh trường hợp form cũ (chưa có field IRT) gửi undefined làm mất giá trị mặc định.
+    const irtA = data.irtA != null ? Number(data.irtA) : 1.0;
+    const irtB = data.irtB != null ? Number(data.irtB) : 0.0;
+    const irtC = data.irtC != null ? Number(data.irtC) : 0.25;
+
     const result = await pool.query(
       `INSERT INTO homework_question_bank
-       (tenant_id, question_type, question_text, help_text, score, correct_answer, options, category, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       (tenant_id, question_type, question_text, help_text, score, correct_answer, options, category, created_by, irt_a, irt_b, irt_c)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING *`,
       [
         tenantId,
@@ -109,6 +119,9 @@ class HomeworkQuestionBankService {
         JSON.stringify(options),
         data.category || null,
         user?.id || null,
+        irtA,
+        irtB,
+        irtC,
       ]
     );
     return camelItem(result.rows[0]);
@@ -121,10 +134,22 @@ class HomeworkQuestionBankService {
     if (!questionText) {
       throw Object.assign(new Error('Vui lòng nhập nội dung câu hỏi'), { status: 400 });
     }
+
+    // Chỉ cập nhật irt_calibrated_at khi có ít nhất 1 tham số IRT được gửi lên —
+    // đây là cách đánh dấu "câu này vừa được hiệu chỉnh", phân biệt với việc
+    // sửa các trường khác (question_text, category...) không liên quan đến IRT.
+    const hasIrtUpdate = data.irtA != null || data.irtB != null || data.irtC != null;
+    const irtA = data.irtA != null ? Number(data.irtA) : 1.0;
+    const irtB = data.irtB != null ? Number(data.irtB) : 0.0;
+    const irtC = data.irtC != null ? Number(data.irtC) : 0.25;
+
     const result = await pool.query(
       `UPDATE homework_question_bank
-       SET question_type=$1, question_text=$2, help_text=$3, score=$4, correct_answer=$5, options=$6, category=$7, updated_at=NOW()
-       WHERE id=$8 AND tenant_id=$9
+       SET question_type=$1, question_text=$2, help_text=$3, score=$4, correct_answer=$5, options=$6, category=$7,
+           irt_a=$8, irt_b=$9, irt_c=$10,
+           irt_calibrated_at = CASE WHEN $11 THEN NOW() ELSE irt_calibrated_at END,
+           updated_at=NOW()
+       WHERE id=$12 AND tenant_id=$13
        RETURNING *`,
       [
         questionType,
@@ -134,6 +159,10 @@ class HomeworkQuestionBankService {
         data.correctAnswer || null,
         JSON.stringify(options),
         data.category || null,
+        irtA,
+        irtB,
+        irtC,
+        hasIrtUpdate,
         id,
         tenantId,
       ]

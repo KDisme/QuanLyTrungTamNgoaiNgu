@@ -40,11 +40,11 @@ module.exports = {
       const passwordHash = requirePassword ? await bcrypt.hash(String(data.password).trim(), 10) : null;
       const timeLimitMinutes = data.timeLimitMinutes ? Math.max(1, parseInt(data.timeLimitMinutes, 10)) : null;
 
-      const assignmentResult = await client.query(
-        `INSERT INTO homework_assignments
-         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, time_limit_minutes, shuffle_questions, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
-         RETURNING *`,
+        const assignmentResult = await client.query(
+          `INSERT INTO homework_assignments
+          (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, time_limit_minutes, shuffle_questions, is_adaptive, adaptive_question_count, created_by, updated_by)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18)
+          RETURNING *`,
         [
           tenantId,
           classIds[0] || null,
@@ -61,12 +61,16 @@ module.exports = {
           passwordHash,
           timeLimitMinutes,
           !!data.shuffleQuestions,
+          !!data.isAdaptive,
+          Math.max(1, parseInt(data.adaptiveQuestionCount, 10) || 10),
           user?.id || null,
         ]
       );
       const assignment = assignmentResult.rows[0];
 
-      await this._replaceQuestions(client, tenantId, assignment.id, data.questions || []);
+      if (!data.isAdaptive) {
+        await this._replaceQuestions(client, tenantId, assignment.id, data.questions || []);
+      }
       await this._replaceClasses(client, tenantId, assignment.id, classIds);
       const { allStudentIds } = await this._syncStudents(client, tenantId, assignment.id, classIds, data.studentIds || []);
 
@@ -158,6 +162,10 @@ module.exports = {
         : current.rows[0].time_limit_minutes;
 
       const shuffleQuestions = data.shuffleQuestions !== undefined ? !!data.shuffleQuestions : current.rows[0].shuffle_questions;
+      const isAdaptive = data.isAdaptive !== undefined ? !!data.isAdaptive : current.rows[0].is_adaptive;
+      const adaptiveQuestionCount = data.adaptiveQuestionCount !== undefined
+        ? Math.max(1, parseInt(data.adaptiveQuestionCount, 10) || 10)
+        : current.rows[0].adaptive_question_count;
 
       const assignmentResult = await client.query(
         `UPDATE homework_assignments
@@ -175,8 +183,10 @@ module.exports = {
              password_hash=$12,
              time_limit_minutes=$13,
              shuffle_questions=$14,
-             updated_by=$15, updated_at=NOW()
-         WHERE id=$16 AND tenant_id=$17
+             is_adaptive=$15,
+             adaptive_question_count=$16,
+             updated_by=$17, updated_at=NOW()
+         WHERE id=$18 AND tenant_id=$19
          RETURNING *`,
         [
           (newClassIds && newClassIds[0]) || current.rows[0].class_id,
@@ -193,6 +203,8 @@ module.exports = {
           passwordHash,
           timeLimitMinutes,
           shuffleQuestions,
+          isAdaptive,
+          adaptiveQuestionCount,
           user?.id || null,
           id,
           tenantId,
@@ -203,7 +215,7 @@ module.exports = {
         return null;
       }
 
-      if (Array.isArray(data.questions)) {
+      if (!isAdaptive && Array.isArray(data.questions)) {
         await this._replaceQuestions(client, tenantId, id, data.questions);
       }
       let syncResult = null;

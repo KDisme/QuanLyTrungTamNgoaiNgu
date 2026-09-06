@@ -213,7 +213,7 @@ export function useHomeworkTake() {
     };
   }, [submission]);
 
-  const totalQuestions = questions.length;
+  const totalQuestions = detail?.isAdaptive ? (detail?.adaptiveQuestionCount || 0) : questions.length;
   const answeredCount = questions.filter((question: any) => {
     const current = answers[Number(question.id)] || {};
     if (question.questionType === 'essay') return !!String(current.answerText || '').trim();

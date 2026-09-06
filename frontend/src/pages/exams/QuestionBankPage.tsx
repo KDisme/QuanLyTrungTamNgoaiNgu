@@ -263,6 +263,11 @@ function emptyHwBankForm(type = 'multiple_choice_4') {
     options: type === 'multiple_choice_4'
       ? [{ label: 'A', text: '' }, { label: 'B', text: '' }, { label: 'C', text: '' }, { label: 'D', text: '' }]
       : [],
+    // Tham số IRT (Item Response Theory) — mặc định theo xác suất đoán mò tự nhiên của từng dạng câu hỏi:
+    // trắc nghiệm 4 đáp án ~25%, đúng/sai ~50%, tự luận không đoán mò được nên = 0.
+    irtA: 1,
+    irtB: 0,
+    irtC: type === 'multiple_choice_4' ? 0.25 : type === 'true_false' ? 0.5 : 0,
   };
 }
 
@@ -277,6 +282,10 @@ function HomeworkBankQuestionForm({ initial, onClose, onSuccess }: { initial?: a
     options: Array.isArray(initial.options) && initial.options.length
       ? initial.options
       : emptyHwBankForm(initial.questionType).options,
+    // initial.irtA có thể là null (câu hỏi cũ trước migration, hoặc chưa từng hiệu chỉnh) -> dùng mặc định trung tính.
+    irtA: initial.irtA != null ? initial.irtA : 1,
+    irtB: initial.irtB != null ? initial.irtB : 0,
+    irtC: initial.irtC != null ? initial.irtC : (initial.questionType === 'true_false' ? 0.5 : 0.25),
   } : emptyHwBankForm());
   const [saving, setSaving] = useState(false);
 
@@ -305,6 +314,7 @@ function HomeworkBankQuestionForm({ initial, onClose, onSuccess }: { initial?: a
   return (
     <Modal
       title={initial ? 'Sửa câu hỏi' : 'Thêm câu hỏi vào ngân hàng'}
+      size="xl"
       onClose={onClose}
       footer={(
         <>
@@ -342,6 +352,47 @@ function HomeworkBankQuestionForm({ initial, onClose, onSuccess }: { initial?: a
             <input className="form-input" value={form.category} onChange={(e) => setForm((prev: any) => ({ ...prev, category: e.target.value }))} placeholder="VD: Unit 3, Ngữ pháp, Từ vựng..." />
           </div>
         </div>
+
+        {form.questionType !== 'essay' && (
+          <div style={{ border: '1px solid var(--border-color, #e5e7eb)', borderRadius: 8, padding: 12, display: 'grid', gap: 10 }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>Tham số IRT (dùng cho thi thích ứng)</div>
+            <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <div className="form-group">
+                <label className="form-label" title="Mức độ câu hỏi phân biệt rõ học sinh giỏi/yếu. Thường 0.5–2.5, càng cao càng phân biệt rõ.">
+                  Độ phân biệt (a)
+                </label>
+                <input
+                  type="number" step="0.05" min="0" className="form-input"
+                  value={form.irtA}
+                  onChange={(e) => setForm((prev: any) => ({ ...prev, irtA: Number(e.target.value) }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" title="Mức năng lực cần có để có 50% cơ hội trả lời đúng. Âm = câu dễ, dương = câu khó. Thường -3 đến 3.">
+                  Độ khó (b)
+                </label>
+                <input
+                  type="number" step="0.1" className="form-input"
+                  value={form.irtB}
+                  onChange={(e) => setForm((prev: any) => ({ ...prev, irtB: Number(e.target.value) }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" title="Xác suất trả lời đúng do đoán mò ngẫu nhiên. VD trắc nghiệm 4 đáp án ≈ 0.25, đúng/sai ≈ 0.5.">
+                  Đoán mò (c)
+                </label>
+                <input
+                  type="number" step="0.05" min="0" max="1" className="form-input"
+                  value={form.irtC}
+                  onChange={(e) => setForm((prev: any) => ({ ...prev, irtC: Number(e.target.value) }))}
+                />
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary, #6b7280)' }}>
+              Chưa chắc chắn về giá trị? Cứ để mặc định — hệ thống sẽ tự động hiệu chỉnh dần dựa trên kết quả làm bài thực tế của học sinh.
+            </div>
+          </div>
+        )}
 
         {form.questionType === 'multiple_choice_4' && (
           <div style={{ display: 'grid', gap: 8 }}>
