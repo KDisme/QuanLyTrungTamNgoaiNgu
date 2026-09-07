@@ -8,7 +8,7 @@ import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '.
 const FORMAT_META: Record<string, { label: string; examType: string; duration: number; oneWay?: boolean; desc: string }> = {
   TOEIC_LR: { label: 'TOEIC hai kỹ năng', examType: 'TOEIC', duration: 120, desc: 'Listening 45 phút / 100 câu, Reading 75 phút / 100 câu' },
   TOEIC_4_SKILLS: { label: 'TOEIC bốn kỹ năng', examType: 'TOEIC', duration: 200, desc: 'Listening/Reading 120 phút, Speaking khoảng 20 phút, Writing 60 phút; tổng 200 phút / 219 câu-task' },
-  VSTEP_4_SKILLS: { label: 'VSTEP bốn kỹ năng', examType: 'VSTEP', duration: 179, oneWay: true, desc: 'Listening 47 phút, Reading 60 phút, Writing 60 phút, Speaking 12 phút; tổng 179 phút, chấm 4 kỹ năng thang 10' },
+  VSTEP_4_SKILLS: { label: 'VSTEP bốn kỹ năng', examType: 'VSTEP', duration: 172, oneWay: true, desc: 'Listening 40 phút, Reading 60 phút, Writing 60 phút, Speaking 12 phút; tổng 172 phút, chấm 4 kỹ năng thang 10' },
 };
 
 function ExamSetForm({ initial, onClose, onSuccess }: { initial?: any; onClose: () => void; onSuccess: () => void }) {
@@ -28,8 +28,8 @@ function ExamSetForm({ initial, onClose, onSuccess }: { initial?: any; onClose: 
 }
 
 function GenerateForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState({ title: '', formatCode: 'TOEIC_LR', durationMinutes: 120, totalScore: 100, description: '', settings: { oneWayNavigation: false } });
-  const submit = async () => { if (!form.title.trim()) return toast.error('Vui lòng nhập tên bộ đề'); try { await examSetsApi.generate(form); toast.success('Đã tự động sinh bộ đề từ ngân hàng câu hỏi'); onSuccess(); onClose(); } catch (err: any) { toast.error(err.response?.data?.message || 'Không thể sinh đề'); } };
+  const [form, setForm] = useState({ title: '', formatCode: 'TOEIC_LR', durationMinutes: 120, totalScore: 100, description: '', allowPartial: true, settings: { oneWayNavigation: false } });
+  const submit = async () => { if (!form.title.trim()) return toast.error('Vui lòng nhập tên bộ đề'); try { await examSetsApi.generate({ ...form, allowPartial: true }); toast.success('Đã tự động sinh bộ đề từ ngân hàng câu hỏi'); onSuccess(); onClose(); } catch (err: any) { toast.error(err.response?.data?.message || 'Không thể sinh đề'); } };
   return <Modal title="Tự động sinh bộ đề" onClose={onClose} footer={<><button className="btn btn-secondary" onClick={onClose}>Huỷ</button><button className="btn btn-primary" onClick={submit}><Sparkles size={14}/> Sinh đề</button></>}>
     <div className="form-group"><label className="form-label">Tên bộ đề</label><input className="form-input" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></div><div className="grid-2"><div className="form-group"><label className="form-label">Format đề</label><select className="form-select" value={form.formatCode} onChange={e => { const meta = FORMAT_META[e.target.value]; setForm(f => ({ ...f, formatCode: e.target.value, durationMinutes: meta.duration, settings: { oneWayNavigation: !!meta.oneWay } })); }}>{Object.entries(FORMAT_META).map(([code, meta]) => <option key={code} value={code}>{meta.label}</option>)}</select></div><div className="form-group"><label className="form-label">Thời gian phút</label><input type="number" className="form-input" value={form.durationMinutes} onChange={e => setForm(f => ({ ...f, durationMinutes: Number(e.target.value) }))} /></div></div><p style={{ color: 'var(--gray-500)', fontSize: 13 }}>Hệ thống sinh đề theo blueprint TOEIC/VSTEP. VSTEP mặc định bật khóa điều hướng một chiều và chấm 4 kỹ năng độc lập thang 10. Nếu ngân hàng chưa đủ câu, bộ đề vẫn được tạo với số câu hiện có.</p>
   </Modal>;

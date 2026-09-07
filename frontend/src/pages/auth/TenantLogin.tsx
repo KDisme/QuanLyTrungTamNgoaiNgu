@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { GraduationCap, Eye, EyeOff } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { authApi } from '../../api';
 import { useAuth } from '../../hooks/useAuth';
 import { getRoleHome } from '../../config/roleConfig';
@@ -41,6 +41,24 @@ export default function TenantLogin() {
     <div className="login-page">
       <div style={{ width: '100%', maxWidth: 420 }}>
         <div className="login-card">
+          <div style={{ marginBottom: 12 }}>
+            <Link
+              to="/portal/login"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                color: '#64748b',
+                fontSize: 13,
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+            >
+              <ArrowLeft size={16} />
+              Quay lại chọn trung tâm khác
+            </Link>
+          </div>
+
           <div className="login-logo" style={{ background: '#2563eb' }}>
             <GraduationCap size={26} />
           </div>
@@ -109,6 +127,28 @@ export default function TenantLogin() {
             <Link to="/register" style={{ color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>
               Đăng ký trung tâm mới
             </Link>
+          </div>
+
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/portal/login')}
+              className="btn btn-secondary"
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                padding: '9px',
+                fontSize: 13,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                color: '#334155'
+              }}
+            >
+              <ArrowLeft size={15} />
+              Đăng nhập trung tâm khác (Portal)
+            </button>
           </div>
         </div>
       </div>

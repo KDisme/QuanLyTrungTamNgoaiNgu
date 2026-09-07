@@ -1,5 +1,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const pool = require('./database');
+const fs = require('fs');
+const path = require('path');
 
 const statements = [
   `CREATE TABLE IF NOT EXISTS homework_assignments (
@@ -164,7 +166,14 @@ async function migrate() {
     for (const statement of statements) {
       await client.query(statement);
     }
-    console.log('✅ Homework schema migrated successfully');
+    const migrationDirectory = path.join(__dirname, 'migrations');
+    const migrationFiles = fs.readdirSync(migrationDirectory)
+      .filter((filename) => filename.endsWith('.sql'))
+      .sort();
+    for (const filename of migrationFiles) {
+      await client.query(fs.readFileSync(path.join(migrationDirectory, filename), 'utf8'));
+    }
+    console.log('✅ Application schema migrated successfully');
   } finally {
     client.release();
   }

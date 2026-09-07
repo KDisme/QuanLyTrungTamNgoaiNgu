@@ -42,7 +42,7 @@ export default api;
 export const authApi = {
   findTenant: (email: string) => api.post('/portal/find-tenant', { email }),
   login: (tenantSlug: string, identifier: string, password: string) =>
-    api.post(`/${tenantSlug}/auth/login`, { identifier, password }),
+  axios.post(`/api/${tenantSlug}/auth/login`, { identifier, password }),
   me: () => api.get('/auth/me'),
   register: (name: string, slug: string, email: string, password: string, fullName?: string) =>
     api.post('/portal/register', { name, slug, email, password, fullName }),
@@ -186,6 +186,10 @@ export const mockExamsApi = {
   },
   submit: (mockExamStudentId: number, answers: object[]) => api.post(`/mock-exam-students/${mockExamStudentId}/submit`, { answers }),
   grade: (mockExamStudentId: number, data: object) => api.patch(`/mock-exam-students/${mockExamStudentId}/grade`, data),
+  runAiGrading: (mockExamStudentId: number) => api.post(`/mock-exam-students/${mockExamStudentId}/ai-grade`, {}, { timeout: 180000 }),
+  getGradingHistory: (mockExamStudentId: number) => api.get(`/mock-exam-students/${mockExamStudentId}/grading-history`),
+  publishGrade: (mockExamStudentId: number) => api.post(`/mock-exam-students/${mockExamStudentId}/publish-grade`),
+  getAiConfig: () => api.get('/exam-ai-config'),
 };
 
 export const homeworkApi = {

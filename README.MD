@@ -96,6 +96,28 @@ admin > staff > teacher > student
 - Bộ đề thi (`exam_sets`) được cấu hình theo blueprint chuẩn của từng định dạng thi (`exam.config.js`), có thể tạo tự động (`generateExamSet`) từ ngân hàng câu hỏi.
 - Kỳ thi thử (`mock_exams`) giao cho lớp/học viên, hỗ trợ giới hạn số lần làm (`attempt_limit`), chấm điểm tự động (trắc nghiệm) và chấm tay (Writing/Speaking), tính điểm theo từng kỹ năng cho VSTEP.
 
+#### Chấm AI VSTEP Writing/Speaking
+
+- Listening và Reading được chấm tự động từ đáp án trắc nghiệm.
+- Sau khi học viên nộp bài VSTEP bốn kỹ năng, backend tự tạo tác vụ AI cho Writing và Speaking.
+- Writing được chấm theo 5 tiêu chí; Task 1 và Task 2 cùng thang 10, điểm Writing = Task 1 × 1/3 + Task 2 × 2/3.
+- Speaking được chấm theo Grammar, Vocabulary, Pronunciation/Intelligibility, Fluency và Content.
+- Điểm AI luôn là bản nháp. Teacher/Admin phải duyệt trước, sau đó bấm **Công bố** thì học viên mới xem được kết quả.
+- Mọi lần chấm lại được lưu trong `exam_grading_runs`; chi tiết từng tiêu chí nằm trong `exam_answer_gradings`.
+
+Cấu hình backend (xem thêm `backend/.env.example`):
+
+```env
+GEMINI_API_KEY=your_new_key
+GEMINI_GRADING_MODEL=gemini-3.8-flash
+GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+AI_GRADING_TIMEOUT_MS=120000
+```
+
+Lấy key tại Google AI Studio, đặt key trong `backend/.env` rồi khởi động lại backend. Không đưa API key thật vào Git. Gemini nhận trực tiếp cả bài Writing và file ghi âm Speaking; mỗi file ghi âm gửi trực tiếp nên cần nhỏ hơn khoảng 14 MB. Migration AI được chạy tự động khi backend khởi động; các file SQL nằm trong `backend/src/config/migrations/`.
+
+Gemini Free Tier có quota theo project/model và có thể tạm thời trả lỗi giới hạn. Dữ liệu gửi qua Free Tier có thể được Google sử dụng để cải thiện sản phẩm; không nên dùng dữ liệu thật có thông tin cá nhân nhạy cảm nếu chưa có chính sách và sự đồng ý phù hợp.
+
 ### 4.5. Bài tập về nhà (Homework)
 - Hỗ trợ 3 dạng câu hỏi: Đúng/Sai, Trắc nghiệm 4 đáp án, Tự luận.
 - Ngân hàng câu hỏi riêng cho bài tập về nhà (`homework_question_bank`), có thể chọn nhanh vào bài thay vì soạn lại.

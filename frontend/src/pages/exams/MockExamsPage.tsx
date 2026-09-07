@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, CheckCircle2, Eye, FileCheck2, Pencil, PlayCircle, Plus, Save, Search, Trash2, UsersRound } from 'lucide-react';
+import { Bot, CalendarCheck, CheckCircle2, Eye, FileCheck2, History, Pencil, PlayCircle, Plus, RotateCcw, Save, Search, Send, Trash2, UsersRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { classesApi, examSetsApi, mockExamsApi } from '../../api';
 import { Badge, ConfirmDialog, EmptyState, Loading, Modal, StatusBadge } from '../../components/common';
@@ -11,13 +11,35 @@ const isManualQuestion = (q: any) => {
 };
 
 const getQuestionMaxScore = (q: any) => {
+  if (q.format_code === 'VSTEP_4_SKILLS' && isManualQuestion(q)) return 10;
   const raw = Number(q.score || q.max_score || 0);
   if (raw > 1) return raw;
-  const type = String(q.question_type || '').toLowerCase();
-  if (type === 'speaking_opinion' || type === 'writing_essay') return 5;
-  if (type === 'writing_email_response') return 4;
-  if (q.skill === 'Writing' || q.skill === 'Speaking') return 10;
   return raw || 1;
+};
+
+const GRADING_STATUS_LABELS: Record<string, string> = {
+  pending_ai: 'Chờ AI chấm',
+  pending_manual: 'Chờ chấm tay',
+  ai_processing: 'AI đang chấm',
+  ai_graded: 'Chờ duyệt',
+  ai_failed: 'AI chấm lỗi',
+  reviewed: 'Đã duyệt',
+  published: 'Đã công bố',
+  not_required: 'Không cần chấm tay',
+  queued: 'Đang xếp hàng',
+  processing: 'AI đang chấm',
+  failed: 'AI chấm lỗi',
+};
+
+const gradingStatusLabel = (status: string) => GRADING_STATUS_LABELS[status] || status || '-';
+
+const DEFAULT_GRADING_CRITERIA: Record<string, any[]> = {
+  Writing: [
+    ['task_fulfillment', 'Task Fulfillment'], ['organization', 'Organization'], ['vocabulary', 'Vocabulary'], ['grammar', 'Grammar'], ['mechanics', 'Mechanics'],
+  ].map(([code, label]) => ({ code, label, weight: 0.2, score: 0, feedback: '' })),
+  Speaking: [
+    ['grammar', 'Grammar'], ['vocabulary', 'Vocabulary'], ['pronunciation', 'Pronunciation / intelligibility'], ['fluency', 'Fluency'], ['content', 'Content'],
+  ].map(([code, label]) => ({ code, label, weight: 0.2, score: 0, feedback: '' })),
 };
 
 function getAnswerFeedback(answer: any) {
@@ -34,7 +56,7 @@ function MockExamForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     classId: initial?.class_id || '',
     startTime: initial?.start_time ? initial.start_time.slice(0, 16) : '',
     endTime: initial?.end_time ? initial.end_time.slice(0, 16) : '',
-    durationMinutes: initial?.duration_minutes || 120,
+    durationMinutes: initial?.duration_minutes || 0,
     attemptLimit: initial?.attempt_limit || 1,
     showResult: initial?.show_result ?? true,
     status: initial?.status || 'upcoming',
@@ -43,7 +65,16 @@ function MockExamForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
   });
 
   useEffect(() => {
-    examSetsApi.getAll({ status: 'active', limit: 200 }).then(r => setExamSets(r.data.examSets || []));
+    examSetsApi.getAll({ status: 'active', limit: 200 }).then(r => {
+      const sets = r.data.examSets || [];
+      setExamSets(sets);
+      if (form.examSetId) {
+        const selected = sets.find((s: any) => s.id === Number(form.examSetId));
+        if (selected?.duration_minutes) {
+          setForm((f: any) => ({ ...f, durationMinutes: Number(selected.duration_minutes) }));
+        }
+      }
+    });
     classesApi.getAll({ limit: 200 }).then(r => setClasses(r.data.classes || []));
   }, []);
 
@@ -69,11 +100,26 @@ function MockExamForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
     <Modal title={initial ? 'Sửa kỳ thi thử' : 'Tạo kỳ thi thử'} size="lg" onClose={onClose} footer={<><button className="btn btn-secondary" onClick={onClose}>Huỷ</button><button className="btn btn-primary" onClick={submit}>Lưu</button></>}>
       <div className="grid-2">
         <div className="form-group" style={{ gridColumn: '1/-1' }}><label className="form-label">Tên kỳ thi</label><input className="form-input" value={form.title} onChange={e => setForm((f: any) => ({ ...f, title: e.target.value }))} placeholder="VD: Thi thử TOEIC tháng 6" /></div>
-        <div className="form-group"><label className="form-label">Bộ đề</label><select className="form-select" value={form.examSetId} onChange={e => setForm((f: any) => ({ ...f, examSetId: e.target.value }))}><option value="">Chọn bộ đề</option>{examSets.map(e => <option key={e.id} value={e.id}>{e.title} - {e.exam_type}</option>)}</select></div>
+        <div className="form-group"><label className="form-label">Bộ đề <span className="required">*</span></label><select className="form-select" value={form.examSetId} onChange={e => {
+          const selectedId = Number(e.target.value);
+          const selectedSet = examSets.find(s => s.id === selectedId);
+          setForm((f: any) => ({
+            ...f,
+            examSetId: e.target.value,
+            durationMinutes: selectedSet?.duration_minutes ? Number(selectedSet.duration_minutes) : f.durationMinutes,
+          }));
+        }}><option value="">Chọn bộ đề</option>{examSets.map(e => <option key={e.id} value={e.id}>{e.title} - {e.exam_type} ({e.duration_minutes || 120} phút)</option>)}</select></div>
         <div className="form-group"><label className="form-label">Lớp tham gia</label><select className="form-select" value={form.classId || ''} onChange={e => setForm((f: any) => ({ ...f, classId: e.target.value }))}><option value="">Không gán lớp</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Bắt đầu</label><input type="datetime-local" className="form-input" value={form.startTime} onChange={e => setForm((f: any) => ({ ...f, startTime: e.target.value }))} /></div>
         <div className="form-group"><label className="form-label">Kết thúc</label><input type="datetime-local" className="form-input" value={form.endTime} onChange={e => setForm((f: any) => ({ ...f, endTime: e.target.value }))} /></div>
-        <div className="form-group"><label className="form-label">Thời gian (phút)</label><input type="number" className="form-input" value={form.durationMinutes} onChange={e => setForm((f: any) => ({ ...f, durationMinutes: Number(e.target.value) }))} /></div>
+        <div className="form-group">
+          <label className="form-label">Thời lượng bài thi</label>
+          <div className="form-input" style={{ background: '#f8fafc', color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+            <span>⏱️</span>
+            <span>{form.durationMinutes ? `${form.durationMinutes} phút` : 'Theo bộ đề'}</span>
+            <span style={{ fontSize: 12, color: 'var(--gray-500)', fontWeight: 400 }}>(tự động lấy từ bộ đề)</span>
+          </div>
+        </div>
         {/* #14: attemptLimit — 0 means unlimited */}
         <div className="form-group">
           <label className="form-label">Số lần thi tối đa <span style={{ color: 'var(--gray-500)', fontWeight: 400, fontSize: 12 }}>(0 = không giới hạn)</span></label>
@@ -98,8 +144,9 @@ function MockExamForm({ initial, onClose, onSuccess }: { initial?: any; onClose:
 
 function StudentResultPanel({ detail, student }: { detail: any; student: any }) {
   const skillScores = student?.skill_score_breakdown || {};
-  const showResult = detail?.show_result !== false && student?.status === 'graded';
+  const showResult = detail?.show_result !== false && student?.status === 'graded' && (!!student?.published_at || student?.grading_status === 'not_required');
   const answersByQuestion = new Map<number, any>((student?.answers || []).map((a: any) => [Number(a.question_id), a]));
+  const gradingsByQuestion = new Map<number, any>((student?.ai_gradings || []).map((a: any) => [Number(a.question_id), a]));
   const manualQuestions = (detail?.questions || []).filter(isManualQuestion);
 
   if (!student) return <EmptyState message="Không tìm thấy bài thi của bạn" />;
@@ -146,6 +193,15 @@ function StudentResultPanel({ detail, student }: { detail: any; student: any }) 
                 {ans?.recording_url && <audio controls src={ans.recording_url} />}
                 <div><b>Điểm:</b> {ans?.score ?? 0}</div>
                 {getAnswerFeedback(ans) && <div style={{ marginTop: 6 }}><b>Nhận xét câu này:</b> {getAnswerFeedback(ans)}</div>}
+                {((gradingsByQuestion.get(Number(q.id))?.criteria_scores || []) as any[]).length > 0 && (
+                  <div className="table-container" style={{ marginTop: 10 }}>
+                    <table><thead><tr><th>Tiêu chí</th><th>Điểm</th><th>Nhận xét</th></tr></thead><tbody>
+                      {(gradingsByQuestion.get(Number(q.id))?.criteria_scores || []).map((criterion: any) => (
+                        <tr key={criterion.code}><td>{criterion.label || criterion.code}</td><td>{criterion.score}/10</td><td>{criterion.feedback || '-'}</td></tr>
+                      ))}
+                    </tbody></table>
+                  </div>
+                )}
               </div>;
             })}
           </div>
@@ -158,22 +214,34 @@ function StudentResultPanel({ detail, student }: { detail: any; student: any }) 
 function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; student: any; onClose: () => void; onSuccess: () => void }) {
   const questions = useMemo(() => (detail?.questions || []).filter(isManualQuestion), [detail]);
   const answersByQuestion = useMemo(() => new Map<number, any>((student?.answers || []).map((a: any) => [Number(a.question_id), a])), [student]);
+  const aiGradingsByQuestion = useMemo(() => new Map<number, any>((student?.ai_gradings || []).map((a: any) => [Number(a.question_id), a])), [student]);
   const [scores, setScores] = useState<Record<number, number>>({});
   const [feedbacks, setFeedbacks] = useState<Record<number, string>>({});
+  const [criteria, setCriteria] = useState<Record<number, any[]>>({});
   const [generalFeedback, setGeneralFeedback] = useState(student?.feedback || '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const nextScores: Record<number, number> = {};
     const nextFeedbacks: Record<number, string> = {};
+    const nextCriteria: Record<number, any[]> = {};
     questions.forEach((q: any) => {
       const ans: any = answersByQuestion.get(Number(q.id));
-      nextScores[q.id] = Number(ans?.score || 0);
-      nextFeedbacks[q.id] = getAnswerFeedback(ans);
+      const ai: any = aiGradingsByQuestion.get(Number(q.id));
+      const alreadyReviewed = ['reviewed', 'published'].includes(student?.grading_status);
+      nextScores[q.id] = Number(alreadyReviewed ? (ans?.score || 0) : (ai?.score ?? ans?.score ?? 0));
+      nextFeedbacks[q.id] = alreadyReviewed ? getAnswerFeedback(ans) : (ai?.feedback || getAnswerFeedback(ans));
+      nextCriteria[q.id] = alreadyReviewed
+        ? (ans?.metadata?.gradingCriteria || ai?.criteria_scores || [])
+        : (ai?.criteria_scores || ans?.metadata?.gradingCriteria || DEFAULT_GRADING_CRITERIA[q.skill] || []);
     });
     setScores(nextScores);
     setFeedbacks(nextFeedbacks);
-  }, [questions, answersByQuestion]);
+    setCriteria(nextCriteria);
+    if (!student?.feedback && student?.ai_grading_run?.ai_result?.overallFeedback) {
+      setGeneralFeedback(student.ai_grading_run.ai_result.overallFeedback);
+    }
+  }, [questions, answersByQuestion, aiGradingsByQuestion, student]);
 
   const computed = useMemo(() => {
     const bySkill: Record<string, number[]> = { Writing: [], Speaking: [] };
@@ -181,12 +249,21 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
       if (q.skill === 'Writing' || q.skill === 'Speaking') bySkill[q.skill].push(Number(scores[q.id] || 0));
     });
     const skillScores: Record<string, any> = {};
-    Object.entries(bySkill).forEach(([skill, values]) => {
-      if (values.length) {
-        const avg = values.reduce((a, b) => a + b, 0) / values.length;
-        skillScores[skill] = { score10: Math.round(avg * 2) / 2 };
-      }
-    });
+    const writingTask1 = questions.filter((q: any) => q.skill === 'Writing' && /task.?1/i.test(q.part || '')).map((q: any) => Number(scores[q.id] || 0));
+    const writingTask2 = questions.filter((q: any) => q.skill === 'Writing' && /task.?2/i.test(q.part || '')).map((q: any) => Number(scores[q.id] || 0));
+    if (writingTask1.length || writingTask2.length) {
+      const task1Score = writingTask1.length ? writingTask1.reduce((a, b) => a + b, 0) / writingTask1.length : 0;
+      const task2Score = writingTask2.length ? writingTask2.reduce((a, b) => a + b, 0) / writingTask2.length : 0;
+      skillScores.Writing = {
+        task1Score: Math.round(task1Score * 2) / 2,
+        task2Score: Math.round(task2Score * 2) / 2,
+        score10: Math.round((task1Score / 3 + task2Score * 2 / 3) * 2) / 2,
+      };
+    }
+    if (bySkill.Speaking.length) {
+      const avg = bySkill.Speaking.reduce((a, b) => a + b, 0) / bySkill.Speaking.length;
+      skillScores.Speaking = { score10: Math.round(avg * 2) / 2 };
+    }
     const manualScore = questions.reduce((sum: number, q: any) => sum + Number(scores[q.id] || 0), 0);
     return { skillScores, manualScore };
   }, [questions, scores]);
@@ -205,9 +282,10 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
         answerId: answersByQuestion.get(Number(q.id))?.id,
         score: Number(scores[q.id] || 0),
         feedback: feedbacks[q.id] || '',
+        criteria: criteria[q.id] || [],
       }));
-      await mockExamsApi.grade(student.id, { answerScores, skillScores: computed.skillScores, feedback: generalFeedback });
-      toast.success('Đã chấm bài và cập nhật kết quả cho học viên');
+      await mockExamsApi.grade(student.id, { answerScores, feedback: generalFeedback });
+      toast.success('Đã duyệt điểm. Bạn có thể công bố kết quả cho học viên.');
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -220,6 +298,7 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
   return (
     <Modal title={`Chấm bài - ${student?.full_name || ''}`} size="lg" onClose={onClose} footer={<><button className="btn btn-secondary" onClick={onClose}>Đóng</button><button className="btn btn-primary" onClick={save} disabled={saving}><Save size={14} /> {saving ? 'Đang lưu...' : 'Lưu điểm'}</button></>}>
       <div style={{ display: 'grid', gap: 14 }}>
+        <div className="alert alert-info"><Bot size={16} /> Điểm AI là bản nháp. Teacher/Admin cần kiểm tra từng tiêu chí và bấm Lưu duyệt trước khi công bố.</div>
         <div className="grid-2">
           <div className="stat-card"><div><div className="stat-value">{student?.objective_score ?? 0}</div><div className="stat-label">ĐIỂM TRẮC NGHIỆM TỰ ĐỘNG</div></div><FileCheck2 color="var(--primary)" /></div>
           <div className="stat-card"><div><div className="stat-value">{computed.manualScore}</div><div className="stat-label">ĐIỂM WRITING/SPEAKING</div></div><CheckCircle2 color="var(--success)" /></div>
@@ -227,6 +306,7 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
 
         {questions.length === 0 ? <EmptyState message="Bài thi này không có câu Writing/Speaking cần chấm thủ công" /> : questions.map((q: any, index: number) => {
           const ans: any = answersByQuestion.get(Number(q.id));
+          const ai: any = aiGradingsByQuestion.get(Number(q.id));
           const maxScore = getQuestionMaxScore(q);
           return (
             <div key={q.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 12, padding: 14 }}>
@@ -243,7 +323,33 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
                 <b>Bài làm của học viên:</b>
                 {ans?.answer_text ? <div style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>{ans.answer_text}</div> : <div style={{ color: 'var(--gray-500)', marginTop: 6 }}>Chưa có câu trả lời dạng text.</div>}
                 {ans?.recording_url && <div style={{ marginTop: 8 }}><audio controls src={ans.recording_url} /></div>}
+                {ai?.transcript && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><b>Transcript AI:</b><br />{ai.transcript}</div>}
+                {ai?.analysis_metadata?.transcriptConfidence != null && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--gray-500)' }}>Độ tin cậy phiên âm: {Math.round(Number(ai.analysis_metadata.transcriptConfidence) * 100)}%</div>}
               </div>
+              {(criteria[q.id] || []).length > 0 && (
+                <div className="table-container" style={{ marginBottom: 12 }}>
+                  <table>
+                    <thead><tr><th>Tiêu chí</th><th style={{ width: 120 }}>Điểm /10</th><th>Nhận xét AI</th></tr></thead>
+                    <tbody>{(criteria[q.id] || []).map((criterion: any, criterionIndex: number) => (
+                      <tr key={criterion.code || criterionIndex}>
+                        <td>{criterion.label || criterion.code}</td>
+                        <td><input type="number" min={0} max={10} step="0.5" className="form-input" value={criterion.score ?? 0} onChange={e => {
+                          const next = [...(criteria[q.id] || [])];
+                          next[criterionIndex] = { ...next[criterionIndex], score: Number(e.target.value) };
+                          setCriteria(prev => ({ ...prev, [q.id]: next }));
+                          const weighted = next.reduce((sum: number, item: any) => sum + Number(item.score || 0) * Number(item.weight || (1 / next.length)), 0);
+                          setScores(prev => ({ ...prev, [q.id]: Math.round(weighted * 2) / 2 }));
+                        }} /></td>
+                        <td><textarea className="form-textarea" rows={2} value={criterion.feedback || ''} onChange={e => {
+                          const next = [...(criteria[q.id] || [])];
+                          next[criterionIndex] = { ...next[criterionIndex], feedback: e.target.value };
+                          setCriteria(prev => ({ ...prev, [q.id]: next }));
+                        }} /></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Điểm câu này {maxScore ? `(0 - ${maxScore})` : ''}</label>
@@ -269,7 +375,7 @@ function GradingModal({ detail, student, onClose, onSuccess }: { detail: any; st
             <>
               <Badge variant="blue">Writing Task 1: {computed.skillScores.Writing.task1Score}/10</Badge>
               <Badge variant="blue">Writing Task 2: {computed.skillScores.Writing.task2Score}/10</Badge>
-              <Badge variant="orange">Writing Tổng ({'½+⅓'}): {computed.skillScores.Writing.score10}/10</Badge>
+              <Badge variant="orange">Writing Tổng (Task 1 × 1/3 + Task 2 × 2/3): {computed.skillScores.Writing.score10}/10</Badge>
             </>
           ) : (
             <Badge variant="blue">Writing: {computed.skillScores.Writing?.score10 ?? '-'}</Badge>
@@ -287,6 +393,7 @@ export default function MockExamsPage() {
   const roles = user?.roles || [];
   const canManage = roles.includes('admin') || roles.includes('staff');
   const canDelete = roles.includes('admin');
+  const canGrade = roles.includes('admin') || roles.includes('teacher');
   const isStudent = roles.includes('student') && !canManage;
   const isTeacher = roles.includes('teacher') && !canManage;
 
@@ -299,6 +406,9 @@ export default function MockExamsPage() {
   const [editing, setEditing] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null);
   const [gradingStudent, setGradingStudent] = useState<any>(null);
+  const [runningAiFor, setRunningAiFor] = useState<number | null>(null);
+  const [publishingFor, setPublishingFor] = useState<number | null>(null);
+  const [gradingHistory, setGradingHistory] = useState<{ student: any; runs: any[] } | null>(null);
   const [deleting, setDeleting] = useState<any>(null);
 
   const load = useCallback(async () => {
@@ -340,6 +450,46 @@ export default function MockExamsPage() {
       await load();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Không thể xoá kỳ thi');
+    }
+  };
+
+  const runAiGrading = async (student: any) => {
+    if (!student?.id) return;
+    if (!window.confirm('Chạy AI chấm Writing và Speaking cho bài này? Kết quả mới sẽ được lưu thành một lần chấm riêng.')) return;
+    setRunningAiFor(student.id);
+    try {
+      await mockExamsApi.runAiGrading(student.id);
+      toast.success('AI đã chấm xong. Vui lòng mở Duyệt điểm để kiểm tra.');
+      await refreshDetail();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'AI chưa thể chấm bài');
+      await refreshDetail();
+    } finally {
+      setRunningAiFor(null);
+    }
+  };
+
+  const publishGrade = async (student: any) => {
+    if (!student?.id) return;
+    if (!window.confirm(`Công bố điểm của ${student.full_name}? Sau khi công bố, học viên sẽ xem được kết quả.`)) return;
+    setPublishingFor(student.id);
+    try {
+      await mockExamsApi.publishGrade(student.id);
+      toast.success('Đã công bố điểm cho học viên');
+      await refreshDetail();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không công bố được điểm');
+    } finally {
+      setPublishingFor(null);
+    }
+  };
+
+  const viewGradingHistory = async (student: any) => {
+    try {
+      const res = await mockExamsApi.getGradingHistory(student.id);
+      setGradingHistory({ student, runs: res.data.runs || [] });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Không tải được lịch sử chấm');
     }
   };
 
@@ -452,12 +602,14 @@ export default function MockExamsPage() {
                     <th>Điểm trắc nghiệm</th>
                     <th>Điểm thủ công</th>
                     <th>Điểm tổng</th>
+                    <th>Chấm AI</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {detailRows.length ? detailRows.map((s: any) => {
-                    const canGradeStudent = ['submitted', 'graded'].includes(s.status) && s.latest_attempt_id;
+                    const canGradeStudent = canGrade && ['submitted', 'graded'].includes(s.status) && s.latest_attempt_id;
+                    const gradingStatus = s.latest_attempt_id ? (s.grading_status || 'pending_ai') : '';
                     return (
                       <tr key={s.id}>
                         <td>{s.full_name}</td>
@@ -467,10 +619,27 @@ export default function MockExamsPage() {
                         <td>{s.objective_score ?? '-'}</td>
                         <td>{s.manual_score ?? '-'}</td>
                         <td>{s.total_score ?? '-'}</td>
-                        <td>{canGradeStudent ? <button className="btn btn-primary btn-sm" onClick={() => setGradingStudent(s)}><FileCheck2 size={12} /> Chấm</button> : <span style={{ color: 'var(--gray-500)', fontSize: 12 }}>Chưa nộp</span>}</td>
+                        <td>{gradingStatus ? <Badge variant={gradingStatus === 'published' ? 'green' : gradingStatus === 'ai_failed' ? 'red' : gradingStatus === 'reviewed' ? 'blue' : 'orange'}>{gradingStatusLabel(gradingStatus)}</Badge> : '-'}</td>
+                        <td>{canGradeStudent ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {detail?.format_code === 'VSTEP_4_SKILLS' && ['pending_ai', 'ai_failed', 'reviewed', 'published'].includes(gradingStatus) && (
+                            <button className="btn btn-secondary btn-sm" disabled={runningAiFor === s.id} onClick={() => runAiGrading(s)}>
+                              {gradingStatus === 'ai_failed' ? <RotateCcw size={12} /> : <Bot size={12} />} {runningAiFor === s.id ? 'AI đang chấm...' : gradingStatus === 'ai_failed' ? 'Thử lại AI' : 'Chấm AI'}
+                            </button>
+                          )}
+                          {['ai_graded', 'reviewed', 'published'].includes(gradingStatus) && (
+                            <button className="btn btn-primary btn-sm" onClick={() => setGradingStudent(s)}><FileCheck2 size={12} /> {gradingStatus === 'ai_graded' ? 'Duyệt điểm' : 'Xem/sửa'}</button>
+                          )}
+                          {['pending_manual', 'ai_failed'].includes(gradingStatus) && (
+                            <button className="btn btn-secondary btn-sm" onClick={() => setGradingStudent(s)}><FileCheck2 size={12} /> Chấm thủ công</button>
+                          )}
+                          {gradingStatus === 'reviewed' && (
+                            <button className="btn btn-primary btn-sm" disabled={publishingFor === s.id} onClick={() => publishGrade(s)}><Send size={12} /> {publishingFor === s.id ? 'Đang công bố...' : 'Công bố'}</button>
+                          )}
+                          {s.ai_grading_run && <button className="btn btn-secondary btn-sm" onClick={() => viewGradingHistory(s)}><History size={12} /> Lịch sử</button>}
+                        </div> : <span style={{ color: 'var(--gray-500)', fontSize: 12 }}>{s.latest_attempt_id ? 'Chỉ xem' : 'Chưa nộp'}</span>}</td>
                       </tr>
                     );
-                  }) : <tr><td colSpan={8}><EmptyState /></td></tr>}
+                  }) : <tr><td colSpan={9}><EmptyState /></td></tr>}
                 </tbody>
               </table>
             </div>
@@ -478,7 +647,22 @@ export default function MockExamsPage() {
         </Modal>
       )}
       {gradingStudent && detail && <GradingModal detail={detail} student={gradingStudent} onClose={() => setGradingStudent(null)} onSuccess={refreshDetail} />}
-      {deleting && <ConfirmDialog message={`Xoá kỳ thi "${deleting.title}"?`} onCancel={() => setDeleting(null)} onConfirm={del} />}
+      {gradingHistory && <Modal title={`Lịch sử chấm - ${gradingHistory.student?.full_name || ''}`} size="lg" onClose={() => setGradingHistory(null)}>
+        <div className="table-container"><table><thead><tr><th>Lần</th><th>Nguồn</th><th>Trạng thái</th><th>Model</th><th>Người duyệt</th><th>Thời gian / lỗi</th></tr></thead><tbody>
+          {gradingHistory.runs.length ? gradingHistory.runs.map((run: any, index: number) => <tr key={run.id}>
+            <td>#{gradingHistory.runs.length - index}</td>
+            <td>{run.trigger_type === 'automatic' ? 'Tự động' : run.trigger_type === 'retry' ? 'Chấm lại AI' : 'Chấm tay'}</td>
+            <td><Badge variant={run.status === 'published' ? 'green' : run.status === 'failed' ? 'red' : 'blue'}>{gradingStatusLabel(run.status)}</Badge></td>
+            <td>{run.grading_model || '-'}</td>
+            <td>{run.reviewed_by_name || '-'}</td>
+            <td>
+              <div>{run.created_at ? new Date(run.created_at).toLocaleString('vi-VN') : '-'}</div>
+              {run.error_message && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4, maxWidth: 360, whiteSpace: 'normal' }}>{run.error_message}</div>}
+            </td>
+          </tr>) : <tr><td colSpan={6}><EmptyState message="Chưa có lịch sử chấm" /></td></tr>}
+        </tbody></table></div>
+      </Modal>}
+      {deleting && <ConfirmDialog message={deleting.status === 'cancelled' ? `Kỳ thi "${deleting.title}" đã được huỷ. Bạn có chắc chắn muốn xoá vĩnh viễn kỳ thi này và toàn bộ dữ liệu làm bài liên quan?` : `Xoá kỳ thi "${deleting.title}"?`} onCancel={() => setDeleting(null)} onConfirm={del} />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Camera, CheckCircle2, Headphones, Mic, Pause, Play, RotateCcw, Save, Send, Square } from 'lucide-react';
 import { mockExamsApi } from '../../api';
+import { useAuth } from '../../hooks/useAuth';
 import { Badge, EmptyState, Loading } from '../../components/common';
 
 type PageMode = 'mock' | 'practice';
@@ -20,7 +21,7 @@ type PreflightStatus = 'avatar' | 'sound' | 'ready';
 const SKILL_ORDER = ['Listening', 'Reading', 'Writing', 'Speaking'];
 // Thời gian mặc định VSTEP nếu server không cung cấp (fallback)
 const VSTEP_DEFAULT_SKILL_SECONDS: Record<string, number> = {
-  Listening: 47 * 60,
+  Listening: 40 * 60,
   Reading: 60 * 60,
   Writing: 60 * 60,
   Speaking: 12 * 60,
@@ -175,11 +176,19 @@ function StrictAudioPlayer({ src, audioKey, state, updateState, registerAudio }:
 }
 
 export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: PageMode }) {
-  const { id } = useParams();
+  const { tenantSlug, id } = useParams();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const targetSlug = tenantSlug || user?.tenant_slug || 'english-ocean';
+
+  const goToMockExamsList = () => {
+    navigate(`/${targetSlug}/student/mock-exams`, { replace: true });
+  };
+
   const [exam, setExam] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [justSubmitted, setJustSubmitted] = useState(false);
   const [answers, setAnswers] = useState<Record<number, any>>({});
   const [recordings, setRecordings] = useState<Record<number, RecordingState>>({});
   const [audioStates, setAudioStates] = useState<Record<string, AudioState>>({});
@@ -416,7 +425,11 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
     const first = sections[0];
     if (first) {
       setActiveSectionKey(first.key);
-      setSkillRemainingSeconds(serverRemaining !== null ? serverRemaining : getSkillSeconds(first.skill));
+      const firstSkillTime = getSkillSeconds(first.skill);
+      const initialRemaining = isVstep
+        ? (serverRemaining !== null ? Math.min(serverRemaining, firstSkillTime) : firstSkillTime)
+        : (serverRemaining !== null ? serverRemaining : firstSkillTime);
+      setSkillRemainingSeconds(initialRemaining);
     }
   };
 
@@ -651,9 +664,11 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [answers, mode, started, studentRow?.id, submitting]);
 
-  const handleExit = async () => {
+  const handleExit = () => {
     pauseAllAudio();
-    navigate(-1);
+    if (window.confirm('Bạn có chắc muốn rời khỏi bài thi? Bài làm hiện tại đã được tự động lưu tạm.')) {
+      goToMockExamsList();
+    }
   };
 
   const buildPayload = async () => {
@@ -703,8 +718,8 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
       }
       await mockExamsApi.submit(studentRow.id, payload);
       submittedRef.current = true;
-      toast.success('Đã nộp bài');
-      navigate(-1);
+      setJustSubmitted(true);
+      toast.success('Nộp bài thi thành công!');
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || 'Không nộp được bài');
     } finally {
@@ -879,12 +894,83 @@ export default function StudentMockExamTakePage({ mode = 'mock' }: { mode?: Page
   if (loading) return <Loading />;
   if (!exam) return <EmptyState message="Không tìm thấy kỳ thi" />;
 
+  const isAlreadySubmitted = studentRow && ['submitted', 'graded'].includes(studentRow.status);
+  const isFinished = isAlreadySubmitted || justSubmitted;
+
+  if (isFinished) {
+    return (
+      <div className="vstep-exam-page" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: 20 }}>
+        <style>{PAGE_STYLE}</style>
+        <div style={{ maxWidth: 540, width: '100%', background: '#fff', borderRadius: 24, padding: '40px 32px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)', border: '1px solid #e2e8f0' }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <CheckCircle2 size={44} />
+          </div>
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Nộp bài thi thành công!</h2>
+          <p style={{ color: '#64748b', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
+            Hệ thống đã ghi nhận đầy đủ bài làm của bạn cho kỳ thi <b>{exam.title}</b>.
+            {isVstep ? ' Phần trắc nghiệm (Nghe & Đọc) đã được chấm tự động. Phần Viết và Nói đang chờ giáo viên chấm điểm.' : ' Toàn bộ bài làm trắc nghiệm đã được ghi nhận.'}
+          </p>
+
+          <div style={{ background: '#f1f5f9', borderRadius: 16, padding: '16px 20px', marginBottom: 28, display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Trạng thái</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a', marginTop: 4 }}>
+                {studentRow?.status === 'graded' ? 'Đã chấm điểm' : 'Đã nộp bài'}
+              </div>
+            </div>
+            <div style={{ borderLeft: '1px solid #cbd5e1' }} />
+            <div>
+              <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Câu đã làm</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
+                {answeredCount}/{answerableQuestions.length}
+              </div>
+            </div>
+            {studentRow?.objective_score !== undefined && studentRow?.objective_score !== null && (
+              <>
+                <div style={{ borderLeft: '1px solid #cbd5e1' }} />
+                <div>
+                  <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Điểm trắc nghiệm</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#2563eb', marginTop: 4 }}>
+                    {studentRow.objective_score}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '12px 20px', fontSize: 15, justifyContent: 'center' }}
+              onClick={goToMockExamsList}
+            >
+              Xem danh sách kỳ thi & kết quả
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '12px 20px', fontSize: 15, justifyContent: 'center' }}
+              onClick={() => {
+                if (window.opener) {
+                  window.close();
+                } else {
+                  goToMockExamsList();
+                }
+              }}
+            >
+              Đóng cửa sổ bài thi
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (mode === 'mock' && !started) {
     return (
       <div className="vstep-exam-page">
         <style>{PAGE_STYLE}</style>
         <div className="exam-start-card preflight-card">
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)}><ArrowLeft size={12} /> Quay lại</button>
+          <button className="btn btn-secondary btn-sm" onClick={goToMockExamsList}><ArrowLeft size={12} /> Quay lại</button>
           <h1>{exam.title}</h1>
           <p>{exam.exam_set_title} • VSTEP: Nghe → Đọc → Viết → Nói</p>
           <div className="preflight-steps">

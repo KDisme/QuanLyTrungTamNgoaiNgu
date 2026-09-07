@@ -133,6 +133,7 @@ tenantRouter.delete('/expenses/:id', authenticate, requireRole('admin'), feeCtrl
 
 // Exams / Mock test module
 tenantRouter.get('/exam-formats', authenticate, examCtrl.getFormats);
+tenantRouter.get('/exam-ai-config', authenticate, requireRole('admin', 'teacher'), examCtrl.getAiConfig);
 tenantRouter.post('/exam-media', authenticate, requireRole('admin', 'staff', 'teacher'), upload.single('file'), examCtrl.uploadMedia);
 tenantRouter.get('/exam-question-groups', authenticate, requireRole('admin', 'staff', 'teacher'), examCtrl.listQuestionGroups);
 tenantRouter.get('/exam-questions', authenticate, requireRole('admin', 'staff', 'teacher'), examCtrl.listQuestions);
@@ -158,6 +159,9 @@ tenantRouter.post('/mock-exam-students/:mockExamStudentId/save-answers', authent
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/recording', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), upload.single('file'), examCtrl.uploadSubmissionRecording);
 tenantRouter.post('/mock-exam-students/:mockExamStudentId/submit', authenticate, requireMockExamStudentAccess('mockExamStudentId', { write: true }), examCtrl.submitAnswers);
 tenantRouter.patch('/mock-exam-students/:mockExamStudentId/grade', authenticate, requireRole('admin', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.gradeStudent); // #16: staff removed — only admin/teacher may grade
+tenantRouter.post('/mock-exam-students/:mockExamStudentId/ai-grade', authenticate, requireRole('admin', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.runAiGrading);
+tenantRouter.get('/mock-exam-students/:mockExamStudentId/grading-history', authenticate, requireRole('admin', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.getGradingHistory);
+tenantRouter.post('/mock-exam-students/:mockExamStudentId/publish-grade', authenticate, requireRole('admin', 'teacher'), requireMockExamStudentAccess('mockExamStudentId'), examCtrl.publishGrade);
 
 // Dashboard
 tenantRouter.get('/dashboard', authenticate, dashboardCtrl.getStats);

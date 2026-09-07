@@ -24,18 +24,18 @@ const TOEIC_SW_BLUEPRINT = [
 const TOEIC_4_SKILLS_BLUEPRINT = [...TOEIC_LR_BLUEPRINT, ...TOEIC_SW_BLUEPRINT];
 
 const VSTEP_BLUEPRINT = [
-  { skill: 'Listening', part: 'Listening Part 1', questionType: 'group_choice', count: 8, questionsPerPart: 8, audioScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, requiresAudio: true, partAudio: true, audioDurationHint: 'một audio chung cho cả Part 1', sectionSeconds: 2400 },
-  { skill: 'Listening', part: 'Listening Part 2', questionType: 'group_choice', count: 12, questionsPerPart: 12, audioScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, requiresAudio: true, partAudio: true, audioDurationHint: 'một audio chung cho cả Part 2', sectionSeconds: 2400 },
-  { skill: 'Listening', part: 'Listening Part 3', questionType: 'group_choice', count: 15, questionsPerPart: 15, audioScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, requiresAudio: true, partAudio: true, audioDurationHint: 'một audio chung cho cả Part 3', sectionSeconds: 2400 },
+  { skill: 'Listening', part: 'Listening Part 1', questionType: 'group_choice', count: 8, questionsPerPart: 8, questionsPerGroup: 8, audioScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, requiresAudio: true, partAudio: true, audioDurationHint: 'một audio chung cho cả Part 1', sectionSeconds: 2400 },
+  { skill: 'Listening', part: 'Listening Part 2', questionType: 'group_choice', count: 12, questionsPerPart: 12, questionsPerGroup: 12, audioScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, requiresAudio: true, partAudio: true, audioDurationHint: 'một audio chung cho cả Part 2', sectionSeconds: 2400 },
+  { skill: 'Listening', part: 'Listening Part 3', questionType: 'group_choice', count: 15, questionsPerPart: 15, questionsPerGroup: 15, audioScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, requiresAudio: true, partAudio: true, audioDurationHint: 'một audio chung cho cả Part 3', sectionSeconds: 2400 },
   { skill: 'Reading', part: 'Reading Part 1', questionType: 'group_choice', count: 10, questionsPerGroup: 10, readingScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, richTextGroup: true, splitScreen: true, passagesMin: 1, passagesMax: 1, passageWordsHint: 500, sectionSeconds: 3600 },
   { skill: 'Reading', part: 'Reading Part 2', questionType: 'group_choice', count: 10, questionsPerGroup: 10, readingScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, richTextGroup: true, splitScreen: true, passagesMin: 1, passagesMax: 1, passageWordsHint: 500, sectionSeconds: 3600 },
   { skill: 'Reading', part: 'Reading Part 3', questionType: 'group_choice', count: 10, questionsPerGroup: 10, readingScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, richTextGroup: true, splitScreen: true, passagesMin: 1, passagesMax: 1, passageWordsHint: 500, sectionSeconds: 3600 },
   { skill: 'Reading', part: 'Reading Part 4', questionType: 'group_choice', count: 10, questionsPerGroup: 10, readingScope: 'part', options: ['A','B','C','D'], showQuestionText: true, showOptionText: true, richTextGroup: true, splitScreen: true, passagesMin: 1, passagesMax: 1, passageWordsHint: 500, sectionSeconds: 3600 },
-  { skill: 'Writing', part: 'Writing Task 1', questionType: 'writing_email_letter', count: 1, sectionSeconds: 1200, minWords: 120, inputMode: 'email_letter', scoreWeight: 1/3 },
-  { skill: 'Writing', part: 'Writing Task 2', questionType: 'writing_essay', count: 1, sectionSeconds: 2400, minWords: 250, inputMode: 'academic_social_essay', scoreWeight: 2/3 },
-  { skill: 'Speaking', part: 'Speaking Part 1', questionType: 'speaking_social_interaction', count: 1, topics: 2, questionsPerTopic: 3, inputMode: 'text_audio', responseMode: 'continuous_recording', sectionSeconds: 180 },
-  { skill: 'Speaking', part: 'Speaking Part 2', questionType: 'speaking_solution_discussion', count: 1, prepSeconds: 60, responseSeconds: 180, totalSeconds: 240, inputMode: 'situation_solutions' },
-  { skill: 'Speaking', part: 'Speaking Part 3', questionType: 'speaking_topic_development', count: 1, prepSeconds: 60, responseSeconds: 240, totalSeconds: 300, inputMode: 'mindmap_followup', requiresImage: true, followUpQuestionsMin: 3, followUpQuestionsMax: 4 },
+  { skill: 'Writing', part: 'Writing Task 1', questionType: 'writing_email_letter', count: 1, sectionSeconds: 1200, minWords: 120, inputMode: 'email_letter', score: 10, scoreWeight: 1/3 },
+  { skill: 'Writing', part: 'Writing Task 2', questionType: 'writing_essay', count: 1, sectionSeconds: 2400, minWords: 250, inputMode: 'academic_social_essay', score: 10, scoreWeight: 2/3 },
+  { skill: 'Speaking', part: 'Speaking Part 1', questionType: 'speaking_social_interaction', count: 1, topics: 2, questionsPerTopic: 3, inputMode: 'text_audio', responseMode: 'continuous_recording', sectionSeconds: 180, score: 10 },
+  { skill: 'Speaking', part: 'Speaking Part 2', questionType: 'speaking_solution_discussion', count: 1, prepSeconds: 60, responseSeconds: 180, totalSeconds: 240, inputMode: 'situation_solutions', score: 10 },
+  { skill: 'Speaking', part: 'Speaking Part 3', questionType: 'speaking_topic_development', count: 1, prepSeconds: 60, responseSeconds: 240, totalSeconds: 300, inputMode: 'mindmap_followup', requiresImage: true, followUpQuestionsMin: 3, followUpQuestionsMax: 4, score: 10 },
 ];
 
 const EXAM_FORMATS = {
@@ -65,15 +65,21 @@ const EXAM_FORMATS = {
   VSTEP_4_SKILLS: {
     code: 'VSTEP_4_SKILLS',
     label: 'VSTEP bốn kỹ năng',
-    description: 'VSTEP 4 kỹ năng: Listening 47 phút / 35 câu, Reading 60 phút / 40 câu, Writing 60 phút / 2 bài, Speaking 12 phút / 3 phần. Chấm độc lập 4 kỹ năng thang 10, Overall là trung bình làm tròn 0.5.',
+    description: 'VSTEP 4 kỹ năng: Listening khoảng 40 phút / 35 câu, Reading 60 phút / 40 câu, Writing 60 phút / 2 bài, Speaking 12 phút / 3 phần. Chấm độc lập 4 kỹ năng thang 10, Overall là trung bình làm tròn 0.5.',
     examType: 'VSTEP',
     skills: ['Listening', 'Reading', 'Writing', 'Speaking'],
-    durationMinutes: 179,
+    durationMinutes: 172,
     totalQuestions: 80,
     writingTasks: 2,
     speakingTasks: 3,
     scoring: { mode: 'independent_4_skills', skillScale: 10, overall: 'average_round_0_5' },
-    settings: { oneWayNavigation: true },
+    settings: {
+      oneWayNavigation: true,
+      listeningSeconds: 2400,
+      readingSeconds: 3600,
+      writingSeconds: 3600,
+      speakingSeconds: 720,
+    },
     blueprint: VSTEP_BLUEPRINT,
   },
   TOEIC_SW: {

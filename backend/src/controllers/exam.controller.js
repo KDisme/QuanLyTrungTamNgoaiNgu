@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const examService = require('../services/exam.service');
+const aiGradingService = require('../services/aiGrading.service');
 
 class ExamController {
   async getFormats(req, res, next) { try { res.json({ formats: examService.getFormats() }); } catch (err) { next(err); } }
@@ -41,6 +42,30 @@ class ExamController {
   }
   async submitAnswers(req, res, next) { try { res.json(await examService.submitAnswers(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body.answers)); } catch (err) { next(err); } }
   async gradeStudent(req, res, next) { try { res.json(await examService.gradeStudent(req.tenant.id, parseInt(req.params.mockExamStudentId), req.body, req.user?.id, req.user)); } catch (err) { next(err); } }
+  async runAiGrading(req, res, next) {
+    try {
+      const result = await aiGradingService.queueAndProcess(
+        req.tenant.id,
+        parseInt(req.params.mockExamStudentId),
+        req.user?.id,
+        'retry'
+      );
+      res.json(result);
+    } catch (err) { next(err); }
+  }
+  async getGradingHistory(req, res, next) {
+    try {
+      res.json({ runs: await aiGradingService.getHistory(req.tenant.id, parseInt(req.params.mockExamStudentId)) });
+    } catch (err) { next(err); }
+  }
+  async publishGrade(req, res, next) {
+    try {
+      res.json(await examService.publishStudentGrade(req.tenant.id, parseInt(req.params.mockExamStudentId), req.user?.id, req.user));
+    } catch (err) { next(err); }
+  }
+  async getAiConfig(req, res, next) {
+    try { res.json(aiGradingService.getConfig()); } catch (err) { next(err); }
+  }
 
   async uploadSubmissionRecording(req, res, next) {
     try {

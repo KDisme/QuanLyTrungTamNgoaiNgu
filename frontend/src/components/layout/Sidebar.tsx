@@ -52,7 +52,7 @@ export default function Sidebar() {
 
   const handleLogout = () => {
     logout();
-    navigate(`/${tenantSlug}/login`);
+    navigate('/portal/login');
   };
 
   const base = `/${tenantSlug}`;
@@ -96,7 +96,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <div className="sidebar-user" onClick={handleLogout} title="Đăng xuất">
+        <div className="sidebar-user" onClick={handleLogout} title="Đăng xuất và đổi trung tâm">
           <div
             className="user-avatar"
             style={{ background: getAvatarColor(user?.fullName || 'U'), width: 32, height: 32 }}
@@ -107,8 +107,42 @@ export default function Sidebar() {
             <div className="user-name">{user?.fullName}</div>
             <div className="user-role">{ROLE_LABELS[role]}</div>
           </div>
-          <LogOut size={14} style={{ color: '#64748b', flexShrink: 0 }} />
+          <LogOut size={14} style={{ color: '#ef4444', flexShrink: 0 }} />
         </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            marginTop: 8,
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            padding: '7px 10px',
+            borderRadius: 6,
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(255,255,255,0.06)',
+            color: '#cbd5e1',
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            e.currentTarget.style.color = '#fecaca';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+            e.currentTarget.style.color = '#cbd5e1';
+          }}
+        >
+          <LogOut size={13} />
+          Đổi trung tâm khác (Portal)
+        </button>
       </div>
     </aside>
   );

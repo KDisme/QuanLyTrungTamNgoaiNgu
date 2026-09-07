@@ -66,18 +66,6 @@ export default function PortalLogin() {
             </button>
           </form>
 
-          <div style={{
-            marginTop: 20, padding: 14, background: 'var(--gray-50)',
-            borderRadius: 8, fontSize: 12.5, lineHeight: 1.8
-          }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>🧪 Tài khoản demo:</div>
-            <div style={{ color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }} onClick={() => setEmail('demo@gmail.com')}>
-              demo@gmail.com — Demo English Center
-            </div>
-            <div style={{ color: 'var(--gray-500)' }}>
-              Mật khẩu: <strong>demo@123</strong>
-            </div>
-          </div>
 
           <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--gray-500)' }}>
             Chưa có tài khoản?{' '}
