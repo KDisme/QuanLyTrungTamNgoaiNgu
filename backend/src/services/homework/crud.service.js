@@ -5,11 +5,26 @@ const { isTeacherOnly, normalizeAnswerValue } = require('./utils');
 const { normalizeQuestions } = require('./mappers');
 const { isTeacherOfClass } = require('./db-helpers');
 
+function assertDueDateValid(dueDate, previousDueDate) {
+  if (dueDate === undefined || dueDate === null || dueDate === '') return;
+  // Phương án (B): nếu hạn nộp không đổi so với giá trị đã lưu, không chặn (cho phép sửa bài cũ đã quá hạn)
+  const prev = previousDueDate ? new Date(previousDueDate).getTime() : null;
+  const next = new Date(dueDate).getTime();
+  if (Number.isNaN(next)) {
+    throw Object.assign(new Error('Hạn nộp không hợp lệ'), { status: 400 });
+  }
+  if (prev !== null && prev === next) return; // không đổi hạn nộp -> bỏ qua check
+  if (next < Date.now()) {
+    throw Object.assign(new Error('Hạn nộp phải lớn hơn hoặc bằng thời điểm hiện tại'), { status: 400 });
+  }
+}
+
 module.exports = {
   async createAssignment(tenantId, user, data) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      assertDueDateValid(data.dueDate);
       const classIds = Array.isArray(data.classIds) ? data.classIds.filter(Boolean).map(Number) : (data.classId ? [Number(data.classId)] : []);
       if (isTeacherOnly(user) && classIds.length) {
         for (const cid of classIds) {
@@ -25,11 +40,11 @@ module.exports = {
       const passwordHash = requirePassword ? await bcrypt.hash(String(data.password).trim(), 10) : null;
       const timeLimitMinutes = data.timeLimitMinutes ? Math.max(1, parseInt(data.timeLimitMinutes, 10)) : null;
 
-      const assignmentResult = await client.query(
-        `INSERT INTO homework_assignments
-         (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, time_limit_minutes, shuffle_questions, created_by, updated_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
-         RETURNING *`,
+        const assignmentResult = await client.query(
+          `INSERT INTO homework_assignments
+          (tenant_id, class_id, title, description, instructions, due_date, allow_late_submission, total_score, status, show_answers_after_submit, show_score_after_submit, require_password, password_hash, time_limit_minutes, shuffle_questions, is_adaptive, adaptive_question_count, created_by, updated_by)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18)
+          RETURNING *`,
         [
           tenantId,
           classIds[0] || null,
@@ -46,12 +61,16 @@ module.exports = {
           passwordHash,
           timeLimitMinutes,
           !!data.shuffleQuestions,
+          !!data.isAdaptive,
+          Math.max(1, parseInt(data.adaptiveQuestionCount, 10) || 10),
           user?.id || null,
         ]
       );
       const assignment = assignmentResult.rows[0];
 
-      await this._replaceQuestions(client, tenantId, assignment.id, data.questions || []);
+      if (!data.isAdaptive) {
+        await this._replaceQuestions(client, tenantId, assignment.id, data.questions || []);
+      }
       await this._replaceClasses(client, tenantId, assignment.id, classIds);
       const { allStudentIds } = await this._syncStudents(client, tenantId, assignment.id, classIds, data.studentIds || []);
 
@@ -64,9 +83,12 @@ module.exports = {
       }
 
       let className = null;
-      if (data.classId) {
-        const classInfo = await pool.query('SELECT name FROM classes WHERE id=$1 AND tenant_id=$2', [data.classId, tenantId]);
-        className = classInfo.rows[0]?.name || null;
+      if (classIds.length) {
+        const classInfo = await pool.query(
+          `SELECT string_agg(name, ', ' ORDER BY name) AS names FROM classes WHERE id = ANY($1::int[]) AND tenant_id=$2`,
+          [classIds, tenantId]
+        );
+        className = classInfo.rows[0]?.names || null;
       }
 
       activityLogService.log(tenantId, user, {
@@ -77,7 +99,7 @@ module.exports = {
         description: className
           ? `đã tạo bài tập "${assignment.title}" cho lớp "${className}"`
           : `đã tạo bài tập "${assignment.title}" (chưa gán lớp)`,
-        metadata: { classId: data.classId || null, className, status: assignment.status },
+        metadata: { classIds, className, status: assignment.status },
       }).catch((err) => console.error('Failed to log homework creation:', err));
 
       this._getAdminAndTeacherIds(tenantId, classIds)
@@ -113,6 +135,7 @@ module.exports = {
         const allowed = await isTeacherOfClass(client, tenantId, current.rows[0].class_id, user.id);
         if (!allowed.rows.length) throw Object.assign(new Error('Bạn chỉ có thể sửa bài tập của lớp mình phụ trách'), { status: 403 });
       }
+      assertDueDateValid(data.dueDate, current.rows[0].due_date);
       const newClassIds = Array.isArray(data.classIds) ? data.classIds.filter(Boolean).map(Number) : (data.classId !== undefined ? [Number(data.classId)].filter(Boolean) : null);
       if (isTeacherOnly(user) && newClassIds?.length) {
         for (const cid of newClassIds) {
@@ -139,6 +162,10 @@ module.exports = {
         : current.rows[0].time_limit_minutes;
 
       const shuffleQuestions = data.shuffleQuestions !== undefined ? !!data.shuffleQuestions : current.rows[0].shuffle_questions;
+      const isAdaptive = data.isAdaptive !== undefined ? !!data.isAdaptive : current.rows[0].is_adaptive;
+      const adaptiveQuestionCount = data.adaptiveQuestionCount !== undefined
+        ? Math.max(1, parseInt(data.adaptiveQuestionCount, 10) || 10)
+        : current.rows[0].adaptive_question_count;
 
       const assignmentResult = await client.query(
         `UPDATE homework_assignments
@@ -156,8 +183,10 @@ module.exports = {
              password_hash=$12,
              time_limit_minutes=$13,
              shuffle_questions=$14,
-             updated_by=$15, updated_at=NOW()
-         WHERE id=$16 AND tenant_id=$17
+             is_adaptive=$15,
+             adaptive_question_count=$16,
+             updated_by=$17, updated_at=NOW()
+         WHERE id=$18 AND tenant_id=$19
          RETURNING *`,
         [
           (newClassIds && newClassIds[0]) || current.rows[0].class_id,
@@ -174,6 +203,8 @@ module.exports = {
           passwordHash,
           timeLimitMinutes,
           shuffleQuestions,
+          isAdaptive,
+          adaptiveQuestionCount,
           user?.id || null,
           id,
           tenantId,
@@ -184,7 +215,7 @@ module.exports = {
         return null;
       }
 
-      if (Array.isArray(data.questions)) {
+      if (!isAdaptive && Array.isArray(data.questions)) {
         await this._replaceQuestions(client, tenantId, id, data.questions);
       }
       let syncResult = null;

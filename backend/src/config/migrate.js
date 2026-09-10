@@ -105,6 +105,10 @@ const statements = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_homework_question_bank_tenant ON homework_question_bank(tenant_id)`,
   `CREATE INDEX IF NOT EXISTS idx_homework_question_bank_category ON homework_question_bank(tenant_id, category)`,
+  `ALTER TABLE homework_question_bank ADD COLUMN IF NOT EXISTS irt_a NUMERIC(6,3) NOT NULL DEFAULT 1.0`,
+  `ALTER TABLE homework_question_bank ADD COLUMN IF NOT EXISTS irt_b NUMERIC(6,3) NOT NULL DEFAULT 0.0`,
+  `ALTER TABLE homework_question_bank ADD COLUMN IF NOT EXISTS irt_c NUMERIC(6,3) NOT NULL DEFAULT 0.25`,
+  `ALTER TABLE homework_question_bank ADD COLUMN IF NOT EXISTS irt_calibrated_at TIMESTAMP NULL`,
   `CREATE TABLE IF NOT EXISTS notifications (
     id SERIAL PRIMARY KEY,
     tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -158,6 +162,23 @@ const statements = [
    FROM homework_assignments
    WHERE class_id IS NOT NULL
    ON CONFLICT DO NOTHING`,
+
+  `CREATE TABLE IF NOT EXISTS homework_adaptive_sessions (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    assignment_id INTEGER NOT NULL REFERENCES homework_assignments(id) ON DELETE CASCADE,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    current_theta NUMERIC(6,3) NOT NULL DEFAULT 0,
+    used_question_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    history JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status VARCHAR(30) NOT NULL DEFAULT 'in_progress',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (assignment_id, student_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_adaptive_sessions_tenant_status ON homework_adaptive_sessions(tenant_id, status)`,
+  `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS is_adaptive BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE homework_assignments ADD COLUMN IF NOT EXISTS adaptive_question_count INTEGER NOT NULL DEFAULT 10`,
 ];
 
 async function migrate() {

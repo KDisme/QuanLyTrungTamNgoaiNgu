@@ -9,6 +9,7 @@ import HomeworkTakeHero from './take/components/HomeworkTakeHero';
 import ScoreSummaryCard from './take/components/ScoreSummaryCard';
 import QuestionCard from './take/components/QuestionCard';
 import SubmitBar from './take/components/SubmitBar';
+import AdaptiveHomeworkTaker from './take/components/AdaptiveHomeworkTaker';
 
 export default function HomeworkTakePage() {
   const navigate = useNavigate();
@@ -60,6 +61,26 @@ export default function HomeworkTakePage() {
 
   if (loading) return <Loading />;
   if (!detail) return <EmptyState message="Không tìm thấy bài tập" />;
+
+  if (detail.isAdaptive) {
+    return (
+      <div style={{ display: 'grid', gap: 18, maxWidth: 1120, margin: '0 auto', paddingBottom: 88 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)}><ArrowLeft size={14} /> Quay lại</button>
+        </div>
+        <HomeworkTakeHero
+          detail={detail}
+          isLocked={isLocked}
+          completionRate={completionRate}
+          secondsLeft={secondsLeft}
+          canEdit={canEdit}
+          canRevealAnswers={canRevealAnswers}
+          totalQuestions={totalQuestions}
+        />
+        <AdaptiveHomeworkTaker assignmentId={detail.id} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'grid', gap: 18, maxWidth: 1120, margin: '0 auto', paddingBottom: 88 }}>

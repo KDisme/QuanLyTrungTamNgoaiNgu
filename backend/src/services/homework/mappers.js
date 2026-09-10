@@ -39,6 +39,8 @@ function camelAssignment(row) {
     requirePassword: row.require_password,
     timeLimitMinutes: row.time_limit_minutes,
     shuffleQuestions: row.shuffle_questions,
+    isAdaptive: !!row.is_adaptive,
+    adaptiveQuestionCount: Number(row.adaptive_question_count || 10),
     questionCount: Number(row.question_count || 0),
     studentCount: Number(row.student_count || 0),
     submittedCount: Number(row.submitted_count || 0),

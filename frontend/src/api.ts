@@ -212,6 +212,12 @@ export const homeworkQuestionBankApi = {
   getUsage: (id: number) => api.get(`/homework-question-bank/${id}/usage`),
 };
 
+export const homeworkAdaptiveApi = {
+  start: (assignmentId: number) => api.post(`/homework-assignments/${assignmentId}/adaptive/start`),
+  answer: (sessionId: number, data: { questionId: number; studentAnswer: string }) =>
+    api.post(`/homework-adaptive-sessions/${sessionId}/answer`, data),
+};
+
 export const notificationsApi = {
   getAll: (params?: object) => api.get('/notifications', { params }),
   unreadCount: () => api.get('/notifications/unread-count'),

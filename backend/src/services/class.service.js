@@ -53,7 +53,10 @@ class ClassService {
               (SELECT string_agg(DISTINCT r.name, ', ' ORDER BY r.name)
                FROM class_weekly_schedules cws
                JOIN rooms r ON r.id = cws.room_id
-               WHERE cws.class_id = c.id) AS room_names
+               WHERE cws.class_id = c.id) AS room_names,
+              (SELECT string_agg(DISTINCT to_char(cws2.start_time, 'HH24:MI') || '–' || to_char(cws2.end_time, 'HH24:MI'), ', ' ORDER BY to_char(cws2.start_time, 'HH24:MI') || '–' || to_char(cws2.end_time, 'HH24:MI'))
+               FROM class_weekly_schedules cws2
+               WHERE cws2.class_id = c.id) AS time_ranges
        FROM classes c
        JOIN branches b ON b.id = c.branch_id
        LEFT JOIN class_students cs ON cs.class_id = c.id AND cs.status='active'
@@ -148,6 +151,7 @@ class ClassService {
       await client.query('SELECT pg_advisory_xact_lock($1, $2)', [tenantId, 1001]);
 
       this._validateClassPayload(data);
+      await this._assertNameNotDuplicate(client, tenantId, name);
       const finalBranchId = branchId || await this._getDefaultBranchId(client, tenantId);
 
       let code = data.code?.trim();
@@ -238,6 +242,7 @@ class ClassService {
         return null;
       }
 
+      await this._assertNameNotDuplicate(client, tenantId, name, classId);
       const finalBranchId = branchId || currentResult.rows[0].branch_id || await this._getDefaultBranchId(client, tenantId);
 
       const result = await client.query(
@@ -457,6 +462,23 @@ class ClassService {
     }
 
     return result.rows[0].id;
+  }
+
+  async _assertNameNotDuplicate(client, tenantId, name, excludeClassId = null) {
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) return;
+    const params = [tenantId, trimmedName];
+    let where = `tenant_id=$1 AND LOWER(name)=LOWER($2) AND status != 'cancelled'`;
+    if (excludeClassId) {
+      params.push(excludeClassId);
+      where += ` AND id != $3`;
+    }
+    const result = await client.query(`SELECT id FROM classes WHERE ${where} LIMIT 1`, params);
+    if (result.rows.length) {
+      const err = new Error(`Tên lớp "${trimmedName}" đã tồn tại. Vui lòng đặt tên khác (VD: thêm hậu tố như "${trimmedName}A", "${trimmedName}B").`);
+      err.code = 'VALIDATION_ERROR';
+      throw err;
+    }
   }
 
   _validateClassPayload(data) {

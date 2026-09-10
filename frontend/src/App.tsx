@@ -14,6 +14,7 @@ import Dashboard from './pages/dashboard/Dashboard';
 import RoleDashboard from './pages/portal/RoleDashboard';
 import UsersPage from './pages/users/UsersPage';
 import { TeachersPage, StaffPage, StudentsPage } from './pages/users/RolePages';
+import AdaptiveTestPage from './pages/dev/AdaptiveTestPage';
 import TeacherDetailPage from './pages/users/TeacherDetailPage';
 import StaffDetailPage from './pages/users/StaffDetailPage';
 import StudentDetailPage from './pages/users/StudentDetailPage';
@@ -84,6 +85,7 @@ function TenantApp() {
 
   return (
     <Routes>
+      <Route path="dev/adaptive-test" element={<AdaptiveTestPage />} />
       <Route path="login" element={<TenantLogin />} />
       <Route path="student/mock-exams/:id/take" element={
         <ProtectedRoute>
